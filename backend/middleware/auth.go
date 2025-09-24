@@ -12,15 +12,19 @@ import (
 var jwtSecret = []byte("ai-code-agent-secret-key")
 
 type Claims struct {
-	UserID uint   `json:"user_id"`
-	Role   string `json:"role"`
+	UserID   uint   `json:"user_id"`
+	Role     string `json:"role"`
+	Name     string `json:"name"`
+	IsActive bool   `json:"is_active"`
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(userID uint, role string) (string, error) {
+func GenerateToken(userID uint, role string, name string, isActive bool) (string, error) {
 	claims := Claims{
-		UserID: userID,
-		Role:   role,
+		UserID:   userID,
+		Role:     role,
+		Name:     name,
+		IsActive: isActive,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -53,8 +57,17 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		// Validate user status (is_active field)
+		if !claims.IsActive {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Tài khoản đã bị vô hiệu hóa"})
+			c.Abort()
+			return
+		}
+
 		c.Set("user_id", claims.UserID)
 		c.Set("user_role", claims.Role)
+		c.Set("user_name", claims.Name)
+		c.Set("user_is_active", claims.IsActive)
 		c.Next()
 	}
 }

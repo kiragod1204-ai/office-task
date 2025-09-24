@@ -13,7 +13,7 @@ import {
   Activity,
   Calendar
 } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 export const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<UserStats | null>(null)

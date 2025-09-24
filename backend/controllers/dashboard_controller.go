@@ -80,7 +80,7 @@ func GetDashboardStats(c *gin.Context) {
 	userRole, _ := c.Get("user_role")
 
 	var tasks []models.Task
-	query := database.DB.Preload("AssignedUser").Preload("Creator").Preload("IncomingFile").Preload("Comments.User")
+	query := database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").Preload("Comments.User")
 
 	// Filter based on role
 	switch userRole.(string) {
@@ -104,23 +104,23 @@ func GetDashboardStats(c *gin.Context) {
 }
 
 func calculateDashboardStats(tasks []models.Task) DashboardStats {
-	// Get incoming file statistics
+	// Get incoming document statistics
 	var incomingFilesStats IncomingFileStats
-	database.DB.Model(&models.IncomingFile{}).Count(&incomingFilesStats.TotalCount)
+	database.DB.Model(&models.IncomingDocument{}).Count(&incomingFilesStats.TotalCount)
 
-	// Count incoming files for this month
+	// Count incoming documents for this month
 	now := time.Now()
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	database.DB.Model(&models.IncomingFile{}).Where("created_at >= ?", startOfMonth).Count(&incomingFilesStats.ThisMonthCount)
+	database.DB.Model(&models.IncomingDocument{}).Where("created_at >= ?", startOfMonth).Count(&incomingFilesStats.ThisMonthCount)
 
-	// Count incoming files for today
+	// Count incoming documents for today
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	database.DB.Model(&models.IncomingFile{}).Where("created_at >= ?", startOfDay).Count(&incomingFilesStats.TodayCount)
+	database.DB.Model(&models.IncomingDocument{}).Where("created_at >= ?", startOfDay).Count(&incomingFilesStats.TodayCount)
 
-	// Get latest order number
-	var latestFile models.IncomingFile
-	database.DB.Order("order_number desc").First(&latestFile)
-	incomingFilesStats.LatestOrder = latestFile.OrderNumber
+	// Get latest arrival number
+	var latestDoc models.IncomingDocument
+	database.DB.Order("arrival_number desc").First(&latestDoc)
+	incomingFilesStats.LatestOrder = latestDoc.ArrivalNumber
 
 	// Basic counts
 	totalTasks := len(tasks)
@@ -158,8 +158,8 @@ func calculateDashboardStats(tasks []models.Task) DashboardStats {
 		}
 
 		// Role statistics
-		if task.AssignedUser.ID > 0 {
-			role := task.AssignedUser.Role
+		if task.AssignedTo != nil && task.AssignedTo.ID > 0 {
+			role := task.AssignedTo.Role
 			if roleMap[role] == nil {
 				roleMap[role] = &RoleStats{
 					Role:      role,
@@ -174,12 +174,12 @@ func calculateDashboardStats(tasks []models.Task) DashboardStats {
 			}
 
 			// User performance statistics
-			userID := task.AssignedUser.ID
+			userID := task.AssignedTo.ID
 			if userMap[userID] == nil {
 				userMap[userID] = &UserPerformanceStats{
 					UserID:   userID,
-					UserName: task.AssignedUser.Name,
-					UserRole: task.AssignedUser.Role,
+					UserName: task.AssignedTo.Name,
+					UserRole: task.AssignedTo.Role,
 				}
 			}
 			userMap[userID].TotalTasks++
@@ -206,12 +206,12 @@ func calculateDashboardStats(tasks []models.Task) DashboardStats {
 
 	// Count unique users per role
 	for _, task := range tasks {
-		if task.AssignedUser.ID > 0 {
-			role := task.AssignedUser.Role
+		if task.AssignedTo != nil && task.AssignedTo.ID > 0 {
+			role := task.AssignedTo.Role
 			if userCounts[role] == nil {
 				userCounts[role] = make(map[uint]bool)
 			}
-			userCounts[role][task.AssignedUser.ID] = true
+			userCounts[role][task.AssignedTo.ID] = true
 		}
 	}
 
@@ -283,11 +283,11 @@ func generateRecentActivity(tasks []models.Task) []ActivityItem {
 			description = "đã tạo công việc mới"
 		}
 
-		userName := task.Creator.Name
-		userRole := task.Creator.Role
-		if task.AssignedUser.ID > 0 && activityType != "creation" {
-			userName = task.AssignedUser.Name
-			userRole = task.AssignedUser.Role
+		userName := task.CreatedBy.Name
+		userRole := task.CreatedBy.Role
+		if task.AssignedTo != nil && task.AssignedTo.ID > 0 && activityType != "creation" {
+			userName = task.AssignedTo.Name
+			userRole = task.AssignedTo.Role
 		}
 
 		activities = append(activities, ActivityItem{
@@ -321,7 +321,7 @@ func getUpcomingTasks(tasks []models.Task, days int) []models.Task {
 	// Sort by deadline
 	for i := 0; i < len(upcoming)-1; i++ {
 		for j := i + 1; j < len(upcoming); j++ {
-			if upcoming[i].Deadline.After(upcoming[j].Deadline) {
+			if upcoming[i].Deadline != nil && upcoming[j].Deadline != nil && upcoming[i].Deadline.After(*upcoming[j].Deadline) {
 				upcoming[i], upcoming[j] = upcoming[j], upcoming[i]
 			}
 		}
@@ -375,8 +375,8 @@ func GetUserTasks(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 
 	var tasks []models.Task
-	if err := database.DB.Preload("AssignedUser").Preload("Creator").Preload("IncomingFile").
-		Where("assigned_to = ?", userID).Find(&tasks).Error; err != nil {
+	if err := database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").
+		Where("assigned_to_id = ?", userID).Find(&tasks).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể lấy công việc của người dùng"})
 		return
 	}

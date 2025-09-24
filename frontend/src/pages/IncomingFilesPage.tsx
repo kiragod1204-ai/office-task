@@ -40,14 +40,11 @@ export const IncomingFilesPage: React.FC = () => {
   const [uploadingFile, setUploadingFile] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [downloadingFile, setDownloadingFile] = useState<string | null>(null)
-  const [isVisible, setIsVisible] = useState(false)
+
   const { user } = useAuth()
   const { toast } = useToast()
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 100)
-    return () => clearTimeout(timer)
-  }, [])
+
 
   useEffect(() => {
     fetchFiles()

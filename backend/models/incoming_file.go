@@ -4,6 +4,8 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
+// IncomingFile - temporary model for backward compatibility
+// This will be removed when file management is properly implemented
 type IncomingFile struct {
 	gorm.Model
 	OrderNumber int    `json:"order_number" gorm:"unique;not null"`

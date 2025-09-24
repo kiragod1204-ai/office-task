@@ -1,5 +1,4 @@
 import React from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Task } from '@/api/tasks'
 import { DashboardStats } from '@/api/dashboard'
@@ -9,7 +8,7 @@ import {
   TrendingUp, 
   BarChart3,
   User,
-  Clock,
+
   CheckCircle
 } from 'lucide-react'
 

@@ -9,19 +9,25 @@ import (
 
 type Task struct {
 	gorm.Model
-	Description    string    `json:"description" gorm:"not null"`
-	Deadline       time.Time `json:"deadline"`
-	Status         string    `json:"status" gorm:"not null"`
-	AssignedTo     uint      `json:"assigned_to"`
-	CreatedBy      uint      `json:"created_by" gorm:"not null"`
-	IncomingFileID uint      `json:"incoming_file_id" gorm:"not null"`
-	ReportFile     string    `json:"report_file"`
+	Description        string     `json:"description" gorm:"not null"`
+	Deadline           *time.Time `json:"deadline"`
+	DeadlineType       string     `json:"deadline_type" gorm:"default:'specific'"` // "specific", "monthly", "quarterly", "yearly"
+	Status             string     `json:"status" gorm:"not null"`
+	AssignedToID       *uint      `json:"assigned_to_id"`
+	CreatedByID        uint       `json:"created_by_id" gorm:"not null"`
+	IncomingDocumentID *uint      `json:"incoming_document_id"`                       // Nullable for independent tasks
+	TaskType           string     `json:"task_type" gorm:"default:'document_linked'"` // "document_linked", "independent"
+	ProcessingContent  string     `json:"processing_content"`
+	ProcessingNotes    string     `json:"processing_notes"`
+	CompletionDate     *time.Time `json:"completion_date"`
+	ReportFile         string     `json:"report_file"`
 
 	// Relations
-	AssignedUser User         `json:"assigned_user" gorm:"foreignkey:AssignedTo"`
-	Creator      User         `json:"creator" gorm:"foreignkey:CreatedBy"`
-	IncomingFile IncomingFile `json:"incoming_file" gorm:"foreignkey:IncomingFileID"`
-	Comments     []Comment    `json:"comments" gorm:"foreignkey:TaskID"`
+	AssignedTo       *User               `json:"assigned_to" gorm:"foreignkey:AssignedToID"`
+	CreatedBy        User                `json:"created_by" gorm:"foreignkey:CreatedByID"`
+	IncomingDocument *IncomingDocument   `json:"incoming_document" gorm:"foreignkey:IncomingDocumentID"`
+	Comments         []Comment           `json:"comments" gorm:"foreignkey:TaskID"`
+	StatusHistory    []TaskStatusHistory `json:"status_history" gorm:"foreignkey:TaskID"`
 }
 
 // Status constants
@@ -30,6 +36,21 @@ const (
 	StatusProcessing = "Đang xử lí"
 	StatusReview     = "Xem xét"
 	StatusCompleted  = "Hoàn thành"
+	StatusNotStarted = "Chưa bắt đầu"
+)
+
+// Task type constants
+const (
+	TaskTypeDocumentLinked = "document_linked"
+	TaskTypeIndependent    = "independent"
+)
+
+// Deadline type constants
+const (
+	DeadlineTypeSpecific  = "specific"
+	DeadlineTypeMonthly   = "monthly"
+	DeadlineTypeQuarterly = "quarterly"
+	DeadlineTypeYearly    = "yearly"
 )
 
 type Comment struct {
@@ -52,6 +73,17 @@ type RemainingTimeInfo struct {
 
 // GetRemainingTime calculates remaining time for a task
 func (t *Task) GetRemainingTime() RemainingTimeInfo {
+	if t.Deadline == nil {
+		return RemainingTimeInfo{
+			Text:      "Không có hạn",
+			IsOverdue: false,
+			Urgency:   "normal",
+			Days:      0,
+			Hours:     0,
+			Minutes:   0,
+		}
+	}
+
 	now := time.Now()
 	diff := t.Deadline.Sub(now)
 

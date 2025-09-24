@@ -11,6 +11,13 @@ import { WorkloadDistribution } from '@/components/ui/workload-distribution'
 import { TaskCalendar } from '@/components/ui/task-calendar'
 import { SystemHealth } from '@/components/ui/system-health'
 
+// Role-specific dashboards
+import { AdminDashboardEnhanced } from '@/components/admin/AdminDashboardEnhanced'
+import { SecretaryDashboard } from '@/components/secretary/SecretaryDashboard'
+import { TeamLeaderDashboard } from '@/components/team-leader/TeamLeaderDashboard'
+import { DeputyDashboard } from '@/components/deputy/DeputyDashboard'
+import { OfficerDashboard } from '@/components/officer/OfficerDashboard'
+
 import { tasksApi, Task } from '@/api/tasks'
 import { dashboardApi, DashboardStats } from '@/api/dashboard'
 import { useAuth } from '@/context/AuthContext'
@@ -72,6 +79,28 @@ export const DashboardPage: React.FC = () => {
     )
   }
 
+  // Render role-specific dashboard
+  if (user?.role === 'Quản trị viên') {
+    return <AdminDashboardEnhanced />
+  }
+
+  if (user?.role === 'Văn thư') {
+    return <SecretaryDashboard />
+  }
+
+  if (user?.role === 'Trưởng Công An Xã') {
+    return <TeamLeaderDashboard />
+  }
+
+  if (user?.role === 'Phó Công An Xã') {
+    return <DeputyDashboard />
+  }
+
+  if (user?.role === 'Cán bộ') {
+    return <OfficerDashboard />
+  }
+
+  // Fallback to original dashboard for unknown roles
   // Ensure tasks is always an array
   const safeTasks = Array.isArray(tasks) ? tasks : []
 
@@ -354,7 +383,7 @@ const TaskDistribution: React.FC<{ tasks: Task[] }> = ({ tasks }) => {
 }
 
 // Quick Stats Component
-const QuickStats: React.FC<{ tasks: Task[], user: any, dashboardStats?: DashboardStats | null }> = ({ tasks, user, dashboardStats }) => {
+const QuickStats: React.FC<{ tasks: Task[], user: any, dashboardStats?: DashboardStats | null }> = ({ tasks, user }) => {
   const myTasks = (tasks || []).filter(task => task.assigned_to === user?.id)
   const myCompletedTasks = myTasks.filter(task => task.status === 'Hoàn thành')
   const myOverdueTasks = myTasks.filter(task =>

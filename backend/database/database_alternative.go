@@ -27,8 +27,14 @@ func InitDatabaseAlternative() {
 
 	// Auto migrate tables
 	DB.AutoMigrate(&models.User{})
-	DB.AutoMigrate(&models.IncomingFile{})
+	DB.AutoMigrate(&models.DocumentType{})
+	DB.AutoMigrate(&models.IssuingUnit{})
+	DB.AutoMigrate(&models.ReceivingUnit{})
+	DB.AutoMigrate(&models.IncomingDocument{})
+	DB.AutoMigrate(&models.OutgoingDocument{})
+	DB.AutoMigrate(&models.SystemNotification{})
 	DB.AutoMigrate(&models.Task{})
+	DB.AutoMigrate(&models.TaskStatusHistory{})
 	DB.AutoMigrate(&models.Comment{})
 
 	// Create default admin user if not exists

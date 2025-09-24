@@ -15,7 +15,7 @@ interface StatusBadgeProps {
   status: string
   variant?: 'default' | 'compact' | 'detailed'
   showIcon?: boolean
-  isOverdue?: boolean
+  isOverdue?: boolean | null
   className?: string
 }
 

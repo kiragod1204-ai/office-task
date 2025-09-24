@@ -1,15 +1,23 @@
 package models
 
 import (
+	"time"
+
 	"github.com/jinzhu/gorm"
 )
 
 type User struct {
 	gorm.Model
-	Name     string `json:"name" gorm:"not null"`
-	Username string `json:"username" gorm:"unique;not null"`
-	Password string `json:"-" gorm:"not null"`
-	Role     string `json:"role" gorm:"not null"` // Quản trị viên, Trưởng Công An Xã, Phó Công An Xã, Văn thư, Cán bộ
+	Name        string     `json:"name" gorm:"not null"`
+	Username    string     `json:"username" gorm:"unique;not null"`
+	Password    string     `json:"-" gorm:"not null"`
+	Role        string     `json:"role" gorm:"not null"` // Quản trị viên, Trưởng Công An Xã, Phó Công An Xã, Văn thư, Cán bộ
+	IsActive    bool       `json:"is_active" gorm:"default:true"`
+	LastLogin   *time.Time `json:"last_login"`
+	CreatedByID *uint      `json:"created_by_id"`
+
+	// Relations
+	CreatedBy *User `json:"created_by" gorm:"foreignkey:CreatedByID"`
 }
 
 // Role constants

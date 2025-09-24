@@ -1,7 +1,7 @@
 import React from 'react'
 import { Task } from '@/api/tasks'
 import { DashboardStats } from '@/api/dashboard'
-import { Badge } from '@/components/ui/badge'
+
 import { 
   TrendingUp, 
   TrendingDown, 

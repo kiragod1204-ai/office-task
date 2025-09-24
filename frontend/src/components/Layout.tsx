@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { NotificationCenter } from '@/components/ui/notification-center'
+import NotificationBanner from '@/components/notifications/NotificationBanner'
 import { tasksApi, Task } from '@/api/tasks'
 import {
   FileText,
@@ -14,7 +15,9 @@ import {
   Crown,
   Star,
   FileCheck,
-  User
+  User,
+  Settings,
+  Activity
 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 
@@ -141,6 +144,18 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       name: 'Người dùng',
       href: '/users',
       icon: Users,
+      roles: ['Quản trị viên']
+    },
+    {
+      name: 'Cấu hình hệ thống',
+      href: '/configuration',
+      icon: Settings,
+      roles: ['Quản trị viên']
+    },
+    {
+      name: 'Audit & Giám sát',
+      href: '/audit',
+      icon: Activity,
       roles: ['Quản trị viên']
     }
   ]
@@ -272,6 +287,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       <div className="pl-64 pt-16">
         <main className="py-6">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <NotificationBanner className="mb-6" />
             {children}
           </div>
         </main>

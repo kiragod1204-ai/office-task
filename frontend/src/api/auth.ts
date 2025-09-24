@@ -3,6 +3,7 @@ import apiClient from './client'
 export interface LoginRequest {
   username: string
   password: string
+  show_password?: boolean // For password visibility toggle data
 }
 
 export interface LoginResponse {
@@ -11,6 +12,8 @@ export interface LoginResponse {
     id: number
     name: string
     role: string
+    is_active: boolean
+    last_login: string | null
   }
 }
 
@@ -18,6 +21,8 @@ export interface User {
   id: number
   name: string
   role: string
+  is_active: boolean
+  last_login: string | null
 }
 
 export const authApi = {

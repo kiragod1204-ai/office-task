@@ -6,8 +6,7 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { WorkflowVisualization, WorkflowTimeline } from '@/components/ui/workflow'
-import { LoadingPage } from '@/components/ui/loading'
-import { getStatusColor, getRoleColor, formatDate, getTaskProgress } from '@/lib/utils'
+import { getRoleColor, formatDate, getTaskProgress } from '@/lib/utils'
 import { RemainingTime } from '@/components/ui/remaining-time'
 import { tasksApi, Task, Comment } from '@/api/tasks'
 import { useAuth } from '@/context/AuthContext'
@@ -32,6 +31,7 @@ import {
 import apiClient from '@/api/client'
 import { usersApi, User as UserType } from '@/api/users'
 import { TaskManagementActions } from '@/components/TaskManagementActions'
+import { TaskStatusHistory } from '@/components/tasks/TaskStatusHistory'
 
 export const TaskDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -98,9 +98,9 @@ export const TaskDetailPage: React.FC = () => {
       // Normalize the data to ensure consistent field names
       const normalizedUsers = usersData.map(user => ({
         ...user,
-        ID: user.ID || user.id,
-        id: user.id || user.ID
-      }))
+        ID: user.ID || user.id || 0,
+        id: user.id || user.ID || 0
+      })).filter(user => user.id > 0)
       
       setUsers(normalizedUsers)
     } catch (error) {
@@ -272,7 +272,7 @@ export const TaskDetailPage: React.FC = () => {
     if (['Trưởng Công An Xã', 'Phó Công An Xã'].includes(user.role)) return true
     
     // Người được gán có thể cập nhật trạng thái
-    if (task.assigned_to === user.id) return true
+    if (task.assigned_to_id === user.id) return true
     
     return false
   }
@@ -284,7 +284,7 @@ export const TaskDetailPage: React.FC = () => {
 
   const canUploadReport = () => {
     if (!user || !task) return false
-    return task.assigned_to === user.id
+    return task.assigned_to_id === user.id
   }
 
   const isOverdue = task && new Date(task.deadline) < new Date() && task.status !== 'Hoàn thành'
@@ -354,9 +354,9 @@ export const TaskDetailPage: React.FC = () => {
                 <div className="flex items-center text-sm">
                   <User className="w-4 h-4 mr-2 text-gray-400" />
                   <span className="text-gray-600">Người tạo:</span>
-                  <span className="ml-2 font-medium">{task.creator.name}</span>
-                  <Badge className={`ml-2 text-xs ${getRoleColor(task.creator.role)}`}>
-                    {task.creator.role}
+                  <span className="ml-2 font-medium">{task.creator?.name || task.created_by?.name}</span>
+                  <Badge className={`ml-2 text-xs ${getRoleColor(task.creator?.role || task.created_by?.role || '')}`}>
+                    {task.creator?.role || task.created_by?.role}
                   </Badge>
                 </div>
                 
@@ -428,20 +428,20 @@ export const TaskDetailPage: React.FC = () => {
                   <div>
                     <h4 className="font-medium">Văn bản đến</h4>
                     <p className="text-sm text-gray-600">
-                      Số: {task.incoming_file.order_number} - {task.incoming_file.file_name}
+                      Số: {task.incoming_file?.order_number} - {task.incoming_file?.file_name}
                     </p>
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleDownloadFile(
-                      task.incoming_file.file_path,
-                      task.incoming_file.file_name
+                      `/api/files/download/${task.incoming_file?.ID}`,
+                      task.incoming_file?.file_name || 'file'
                     )}
-                    disabled={downloadingFile === task.incoming_file.file_path}
+                    disabled={downloadingFile === `/api/files/download/${task.incoming_file?.ID}`}
                   >
                     <Download className="w-4 h-4 mr-2" />
-                    {downloadingFile === task.incoming_file.file_path ? 'Đang tải...' : 'Tải xuống'}
+                    {downloadingFile === `/api/files/download/${task.incoming_file?.ID}` ? 'Đang tải...' : 'Tải xuống'}
                   </Button>
                 </div>
               </div>
@@ -704,6 +704,9 @@ export const TaskDetailPage: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Task Status History */}
+          <TaskStatusHistory taskId={task.ID} />
         </div>
       </div>
 

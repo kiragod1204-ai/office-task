@@ -16,28 +16,66 @@ export interface Task {
   DeletedAt: string | null
   description: string
   deadline: string
+  deadline_type: string
   status: string
-  assigned_to: number
-  created_by: number
-  incoming_file_id: number
+  assigned_to_id: number
+  created_by_id: number
+  incoming_document_id?: number
+  task_type: string
+  processing_content: string
+  processing_notes: string
+  completion_date?: string
   report_file: string
   remaining_time?: RemainingTimeInfo
-  assigned_user: {
+  assigned_to?: {
     ID: number
     name: string
     role: string
   }
-  creator: {
+  created_by?: {
     ID: number
     name: string
     role: string
   }
-  incoming_file: {
+  incoming_document?: {
+    ID: number
+    arrival_number: number
+    original_number: string
+    summary: string
+  }
+  comments: Comment[]
+  status_history: TaskStatusHistory[]
+  // Legacy fields for backward compatibility
+  assigned_user?: {
+    ID: number
+    name: string
+    role: string
+  }
+  creator?: {
+    ID: number
+    name: string
+    role: string
+  }
+  incoming_file?: {
     ID: number
     order_number: number
     file_name: string
   }
-  comments: Comment[]
+}
+
+export interface TaskStatusHistory {
+  ID: number
+  CreatedAt: string
+  task_id: number
+  old_status: string
+  new_status: string
+  changed_by_id: number
+  notes: string
+  changed_by: {
+    ID: number
+    name: string
+    role: string
+  }
 }
 
 export interface Comment {
@@ -57,9 +95,13 @@ export interface Comment {
 
 export interface CreateTaskRequest {
   description: string
-  deadline: string
+  deadline?: string
+  deadline_type?: string
   assigned_to: number
-  incoming_file_id: number
+  incoming_document_id?: number
+  task_type?: string
+  processing_content?: string
+  processing_notes?: string
 }
 
 export interface AssignTaskRequest {
@@ -68,6 +110,7 @@ export interface AssignTaskRequest {
 
 export interface UpdateStatusRequest {
   status: string
+  notes?: string
 }
 
 export interface CreateCommentRequest {
@@ -77,13 +120,27 @@ export interface CreateCommentRequest {
 export interface UpdateTaskRequest {
   description?: string
   deadline?: string
+  deadline_type?: string
   assigned_to?: number
-  incoming_file_id?: number
+  incoming_document_id?: number
+  task_type?: string
+  processing_content?: string
+  processing_notes?: string
 }
 
 export interface ForwardTaskRequest {
   assigned_to: number
   comment?: string
+}
+
+export interface DelegateTaskRequest {
+  assigned_to: number
+  notes?: string
+}
+
+export interface UpdateProcessingContentRequest {
+  processing_content: string
+  processing_notes: string
 }
 
 export const tasksApi = {
@@ -138,6 +195,21 @@ export const tasksApi = {
 
   forwardTask: async (id: number, data: ForwardTaskRequest): Promise<Task> => {
     const response = await apiClient.post(`/tasks/${id}/forward`, data)
+    return response.data
+  },
+
+  delegateTask: async (id: number, data: DelegateTaskRequest): Promise<Task> => {
+    const response = await apiClient.post(`/tasks/${id}/delegate`, data)
+    return response.data
+  },
+
+  updateProcessingContent: async (id: number, data: UpdateProcessingContentRequest): Promise<Task> => {
+    const response = await apiClient.put(`/tasks/${id}/processing`, data)
+    return response.data
+  },
+
+  getTaskStatusHistory: async (id: number): Promise<TaskStatusHistory[]> => {
+    const response = await apiClient.get(`/tasks/${id}/history`)
     return response.data
   }
 }

@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-code-agent-postgres-prod
+    environment:
+      POSTGRES_DB: ai_code_agent
+      POSTGRES_USER: ${POSTGRES_USER:-prod_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prod_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./backend/setup-postgres.sql:/docker-entrypoint-initdb.d/setup.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-prod_user} -d ai_code_agent"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ai-code-agent-network
+
+  backend:
+    image: ai-code-agent-backend:latest
+    container_name: ai-code-agent-backend-prod
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER:-prod_user}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-prod_password}
+      - DB_NAME=ai_code_agent
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production}
+      - GIN_MODE=release
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ai-code-agent-network
+
+  frontend:
+    image: nginx:alpine
+    container_name: ai-code-agent-frontend-prod
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - ai-code-agent-network
+
+volumes:
+  postgres_prod_data:
+
+networks:
+  ai-code-agent-network:
+    driver: bridge

@@ -10,8 +10,9 @@ import { useToast } from '@/hooks/use-toast'
 import { tasksApi, Task, UpdateTaskRequest, ForwardTaskRequest } from '@/api/tasks'
 import { usersApi, User as UserType } from '@/api/users'
 import { filesApi } from '@/api/files'
-import { Edit, Trash2, Forward, AlertTriangle, Search, X, User } from 'lucide-react'
+import { Edit, Trash2, Forward, AlertTriangle, Search, X, User, Settings } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { ComprehensiveTaskInterface } from './tasks/ComprehensiveTaskInterface'
 
 interface TaskManagementActionsProps {
   task: Task
@@ -35,8 +36,8 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
   const [editForm, setEditForm] = useState({
     description: task?.description || '',
     deadline: task?.deadline ? new Date(task.deadline).toISOString().slice(0, 16) : '',
-    assigned_to: task?.assigned_to || 0,
-    incoming_file_id: task?.incoming_file_id || 0
+    assigned_to: task?.assigned_to_id || 0,
+    incoming_document_id: task?.incoming_document_id || 0
   })
   
   const [forwardForm, setForwardForm] = useState({
@@ -71,9 +72,9 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
       // Normalize user data to ensure consistent field names
       const normalizeUsers = (users: UserType[]) => users.map(user => ({
         ...user,
-        ID: user.ID || user.id,
-        id: user.id || user.ID
-      }))
+        ID: user.ID || user.id || 0,
+        id: user.id || user.ID || 0
+      })).filter(user => user.id > 0)
       
       const allUsers = [
         ...normalizeUsers(teamLeaders),
@@ -106,7 +107,7 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
     if (!user) return false
     if (user.role === 'Văn thư') return true
     if (user.role === 'Trưởng Công An Xã') {
-      return task.created_by === user.id || task.assigned_to === user.id
+      return task.created_by_id === user.id || task.assigned_to_id === user.id
     }
     return false
   }
@@ -115,7 +116,7 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
     if (!user) return false
     if (user.role === 'Văn thư') return true
     if (user.role === 'Trưởng Công An Xã') {
-      return task.created_by === user.id && task.status !== 'Hoàn thành'
+      return task.created_by_id === user.id && task.status !== 'Hoàn thành'
     }
     return false
   }
@@ -153,12 +154,12 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
         updateData.deadline = newDeadline
       }
       
-      if (editForm.assigned_to !== task.assigned_to) {
+      if (editForm.assigned_to !== task.assigned_to_id) {
         updateData.assigned_to = editForm.assigned_to
       }
       
-      if (editForm.incoming_file_id !== task.incoming_file_id) {
-        updateData.incoming_file_id = editForm.incoming_file_id
+      if (editForm.incoming_document_id !== task.incoming_document_id) {
+        updateData.incoming_document_id = editForm.incoming_document_id
       }
 
       const updatedTask = await tasksApi.updateTask(task.ID, updateData)
@@ -260,10 +261,17 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
   }
 
   return (
-    <div className="space-y-2">
-      <h4 className="font-medium text-sm">Quản lý công việc</h4>
+    <div className="space-y-4">
+      {/* Comprehensive Task Interface */}
+      <ComprehensiveTaskInterface task={task} onTaskUpdate={onTaskUpdate} />
       
-      {canEdit() && (
+      <div className="space-y-2">
+        <h4 className="font-medium text-sm flex items-center">
+          <Settings className="w-4 h-4 mr-2" />
+          Hành động quản lý
+        </h4>
+        
+        {canEdit() && (
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" className="w-full justify-start">
@@ -327,7 +335,7 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
                     </SelectTrigger>
                     <SelectContent>
                       {filterUsers(userSearchTerm)
-                        .filter(user => (user?.id || user?.ID) && (user.id > 0 || user.ID > 0))
+                        .filter(user => user?.id && user.id > 0)
                         .map((user) => (
                           <SelectItem key={user.id || user.ID} value={(user.id || user.ID).toString()}>
                             <div className="flex flex-col">
@@ -347,10 +355,10 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
               </div>
               
               <div>
-                <Label htmlFor="incoming_file">Văn bản đến</Label>
+                <Label htmlFor="incoming_document">Văn bản đến</Label>
                 <Select
-                  value={editForm.incoming_file_id ? editForm.incoming_file_id.toString() : ""}
-                  onValueChange={(value) => setEditForm({ ...editForm, incoming_file_id: parseInt(value) })}
+                  value={editForm.incoming_document_id ? editForm.incoming_document_id.toString() : ""}
+                  onValueChange={(value) => setEditForm({ ...editForm, incoming_document_id: parseInt(value) })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Chọn văn bản đến" />
@@ -411,9 +419,9 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
                     <User className="w-4 h-4 text-blue-600" />
                   </div>
                   <div>
-                    <p className="font-medium text-sm">{task.assigned_user?.name || 'Chưa gán'}</p>
+                    <p className="font-medium text-sm">{task.assigned_to?.name || 'Chưa gán'}</p>
                     <p className="text-xs text-gray-500">
-                      {task.assigned_user?.role} • @{task.assigned_user?.username}
+                      {task.assigned_to?.role}
                     </p>
                   </div>
                 </div>
@@ -459,16 +467,16 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
                     ) : (
                       <>
                         {filterUsers(forwardUserSearchTerm)
-                          .filter(user => (user?.id || user?.ID) && (user.id > 0 || user.ID > 0))
+                          .filter(user => user?.id && user.id > 0)
                           .map((user) => {
-                            const userId = user.id || user.ID
+                            const userId = user.id
                             const isSelected = forwardForm.assigned_to === userId
-                            const isCurrent = task.assigned_to === userId
+                            const isCurrent = task.assigned_to_id === userId
                             
                             return (
                               <button
                                 key={userId}
-                                onClick={() => setForwardForm({ ...forwardForm, assigned_to: userId })}
+                                onClick={() => setForwardForm({ ...forwardForm, assigned_to: userId || 0 })}
                                 disabled={isCurrent}
                                 className={`w-full text-left p-3 border-b last:border-b-0 hover:bg-gray-50 transition-colors ${
                                   isSelected ? 'bg-blue-50 border-blue-200' : ''
@@ -645,6 +653,7 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
           </DialogContent>
         </Dialog>
       )}
+      </div>
     </div>
   )
 }

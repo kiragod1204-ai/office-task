@@ -4,13 +4,11 @@ import { Button } from '@/components/ui/button'
 import { Task } from '@/api/tasks'
 import { DashboardStats } from '@/api/dashboard'
 import { Link } from 'react-router-dom'
-import { formatDate, getStatusColor, getRoleColor } from '@/lib/utils'
+import { getRoleColor } from '@/lib/utils'
 import { 
   FileText, 
-  User, 
   Clock, 
-  CheckCircle, 
-  AlertCircle,
+  CheckCircle,
   MessageSquare,
   Eye,
   ArrowRight
@@ -42,8 +40,8 @@ export const RecentActivity: React.FC<RecentActivityProps> = ({
         type: getActivityType(task.status),
         description: getActionText(task.status),
         task_id: task.ID,
-        user_name: task.assigned_user?.name || task.creator.name,
-        user_role: task.assigned_user?.role || task.creator.role,
+        user_name: task.assigned_user?.name || task.creator?.name || task.assigned_to?.name || task.created_by?.name || 'Unknown',
+        user_role: task.assigned_user?.role || task.creator?.role || task.assigned_to?.role || task.created_by?.role || 'Unknown',
         timestamp: task.UpdatedAt,
         task_title: task.description
       }))

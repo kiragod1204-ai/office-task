@@ -1,6 +1,7 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
+import { NotificationProvider } from '@/context/NotificationContext'
 import { Layout } from '@/components/Layout'
 import { LoginPage } from '@/pages/LoginPage'
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -9,6 +10,9 @@ import { TaskDetailPage } from '@/pages/TaskDetailPage'
 import { CreateTaskPage } from '@/pages/CreateTaskPage'
 import { UserManagementPage as UsersPage } from '@/pages/UserManagementPage'
 import { IncomingFilesPage } from '@/pages/IncomingFilesPage'
+import ConfigurationPage from '@/pages/ConfigurationPage'
+import AuditPage from '@/pages/AuditPage'
+import { SessionTimeoutHandler } from '@/components/SessionTimeoutHandler'
 import { Toaster } from '@/components/ui/toaster'
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -86,6 +90,22 @@ const AppRoutes: React.FC = () => {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/configuration"
+        element={
+          <ProtectedRoute>
+            <ConfigurationPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/audit"
+        element={
+          <ProtectedRoute>
+            <AuditPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
@@ -95,10 +115,13 @@ const AppRoutes: React.FC = () => {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <AppRoutes />
-        <Toaster />
-      </Router>
+      <NotificationProvider>
+        <Router>
+          <AppRoutes />
+          <SessionTimeoutHandler />
+          <Toaster />
+        </Router>
+      </NotificationProvider>
     </AuthProvider>
   )
 }

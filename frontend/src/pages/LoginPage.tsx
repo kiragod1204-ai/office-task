@@ -30,7 +30,7 @@ export const LoginPage: React.FC = () => {
     setError('')
 
     try {
-      await login(username, password)
+      await login(username, password, showPassword)
       navigate('/dashboard')
     } catch (err: any) {
       setError(err.response?.data?.error || 'Đăng nhập thất bại')
