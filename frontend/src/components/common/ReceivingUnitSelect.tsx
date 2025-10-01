@@ -27,9 +27,15 @@ const ReceivingUnitSelect: React.FC<ReceivingUnitSelectProps> = ({
     try {
       setLoading(true);
       const response = await receivingUnitApi.getAll();
-      setReceivingUnits(response.data.data);
+      
+      // Handle different response structures
+      const data = response.data?.data || response.data || [];
+      // Ensure data is an array and has valid structure
+      const validData = Array.isArray(data) ? data.filter(item => item && typeof item === 'object' && item.id) : [];
+      setReceivingUnits(validData);
     } catch (error) {
       console.error('Error loading receiving units:', error);
+      setReceivingUnits([]);
     } finally {
       setLoading(false);
     }
@@ -37,7 +43,7 @@ const ReceivingUnitSelect: React.FC<ReceivingUnitSelectProps> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedValue = parseInt(e.target.value);
-    if (!isNaN(selectedValue)) {
+    if (!isNaN(selectedValue) && selectedValue > 0) {
       onChange(selectedValue);
     }
   };
@@ -52,15 +58,15 @@ const ReceivingUnitSelect: React.FC<ReceivingUnitSelectProps> = ({
 
   return (
     <select
-      value={value || ''}
+      value={value && value > 0 ? value : ''}
       onChange={handleChange}
       required={required}
       className={`${className} border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500`}
     >
       <option value="">{placeholder}</option>
-      {receivingUnits.map((unit) => (
-        <option key={unit.id} value={unit.id}>
-          {unit.name}
+      {Array.isArray(receivingUnits) && receivingUnits.map((unit, index) => (
+        <option key={unit?.id || `unit-${index}`} value={unit?.id || ''}>
+          {unit?.name || 'Unknown'}
         </option>
       ))}
     </select>

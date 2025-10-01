@@ -26,6 +26,7 @@ export const TasksPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('')
   const [urgencyFilter, setUrgencyFilter] = useState('')
   const [isVisible, setIsVisible] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
 
   useEffect(() => {
@@ -37,9 +38,12 @@ export const TasksPage: React.FC = () => {
     const fetchTasks = async () => {
       try {
         const data = await tasksApi.getTasks()
-        setTasks(data)
+        // Ensure data is an array
+        setTasks(Array.isArray(data) ? data : [])
       } catch (error) {
         console.error('Error fetching tasks:', error)
+        setError('Không thể tải danh sách công việc')
+        setTasks([]) // Set empty array on error
       } finally {
         setLoading(false)
       }
@@ -48,8 +52,12 @@ export const TasksPage: React.FC = () => {
     fetchTasks()
   }, [])
 
-  const filteredTasks = tasks.filter(task => {
-    const matchesSearch = task.description.toLowerCase().includes(searchTerm.toLowerCase())
+  // Ensure tasks is always an array
+  const safeTasks = Array.isArray(tasks) ? tasks : []
+  
+  const filteredTasks = safeTasks.filter(task => {
+    if (!task || typeof task !== 'object') return false
+    const matchesSearch = task.description?.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = !statusFilter || task.status === statusFilter
     const matchesUrgency = !urgencyFilter || 
       (urgencyFilter === 'overdue' && task.remaining_time?.is_overdue) ||
@@ -77,11 +85,24 @@ export const TasksPage: React.FC = () => {
     )
   }
 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <div className="text-red-500 text-6xl">⚠️</div>
+        <h3 className="text-lg font-medium text-gray-900">Có lỗi xảy ra</h3>
+        <p className="text-gray-600">{error}</p>
+        <Button onClick={() => window.location.reload()}>
+          Thử lại
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-8">
       {/* Overdue Notification */}
       <OverdueNotification 
-        tasks={tasks}
+        tasks={safeTasks}
         className={cn(
           "transition-all duration-700 transform",
           isVisible ? "translate-y-0 opacity-100" : "-translate-y-4 opacity-0"
@@ -107,7 +128,7 @@ export const TasksPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-1">
               <Clock className="w-4 h-4" />
-              <span>{filteredTasks.filter(t => t.status !== 'Hoàn thành').length} đang xử lý</span>
+              <span>{filteredTasks.filter(t => t?.status !== 'Hoàn thành').length} đang xử lý</span>
             </div>
           </div>
         </div>
@@ -134,7 +155,7 @@ export const TasksPage: React.FC = () => {
         )}
         style={{ transitionDelay: "200ms" }}
       >
-        <TaskStats tasks={tasks} />
+        <TaskStats tasks={safeTasks} />
       </div>
 
       {/* Enhanced Filters */}
@@ -265,12 +286,14 @@ export const TasksPage: React.FC = () => {
                     <span className="font-medium">Tạo: {formatDate(task.CreatedAt)}</span>
                   </div>
 
-                  <div className="flex items-center text-sm text-gray-600 group-hover:text-gray-700 transition-colors">
-                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center mr-3 group-hover:bg-orange-200 transition-colors">
-                      <FileText className="w-4 h-4 text-orange-600" />
+                  {task.incoming_document && (
+                    <div className="flex items-center text-sm text-gray-600 group-hover:text-gray-700 transition-colors">
+                      <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center mr-3 group-hover:bg-orange-200 transition-colors">
+                        <FileText className="w-4 h-4 text-orange-600" />
+                      </div>
+                      <span className="font-medium">Văn bản số: {task.incoming_document.arrival_number}</span>
                     </div>
-                    <span className="font-medium">Văn bản số: {task.incoming_file?.order_number}</span>
-                  </div>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t border-gray-100">

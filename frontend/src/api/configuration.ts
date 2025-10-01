@@ -1,21 +1,21 @@
 import { apiClient } from './client';
 
 export interface DocumentType {
-  id: number;
+  ID: number;
   name: string;
   description: string;
   is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  CreatedAt: string;
+  UpdatedAt: string;
 }
 
 export interface IssuingUnit {
-  id: number;
+  ID: number;
   name: string;
   description: string;
   is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  CreatedAt: string;
+  UpdatedAt: string;
 }
 
 export interface ReceivingUnit {

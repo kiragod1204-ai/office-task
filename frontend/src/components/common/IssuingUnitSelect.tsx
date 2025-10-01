@@ -27,24 +27,34 @@ const IssuingUnitSelect: React.FC<IssuingUnitSelectProps> = ({
     loadIssuingUnits();
   }, []);
 
+  // Debug: log the current state
+  useEffect(() => {
+    console.log('IssuingUnitSelect - issuingUnits state:', issuingUnits);
+    console.log('IssuingUnitSelect - loading state:', loading);
+    console.log('IssuingUnitSelect - current value:', value);
+  }, [issuingUnits, loading, value]);
+
   const loadIssuingUnits = async () => {
     try {
       setLoading(true);
       const response = await issuingUnitApi.getAll();
-      setIssuingUnits(response.data.data);
+      const data = response.data?.data || response.data || [];
+      setIssuingUnits(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('Error loading issuing units:', error);
+      setIssuingUnits([]);
     } finally {
       setLoading(false);
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedValue = parseInt(e.target.value);
-    if (!isNaN(selectedValue)) {
-      onChange(selectedValue);
-    } else if (allowEmpty) {
+    const value = e.target.value;
+    const numValue = parseInt(value);
+    
+    if (value === '' || isNaN(numValue)) {
       onChange(0);
+    } else {
+      onChange(numValue);
     }
   };
 
@@ -61,12 +71,13 @@ const IssuingUnitSelect: React.FC<IssuingUnitSelectProps> = ({
       value={value || ''}
       onChange={handleChange}
       required={required}
-      className={`${className} border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500`}
+      disabled={loading}
+      className={`w-full ${className} border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${loading ? 'bg-gray-100' : 'bg-white'}`}
     >
       <option value="">{allowEmpty ? emptyLabel : placeholder}</option>
-      {issuingUnits.map((unit) => (
-        <option key={unit.id} value={unit.id}>
-          {unit.name}
+      {Array.isArray(issuingUnits) && issuingUnits.map((unit, index) => (
+        <option key={unit?.ID || `unit-${index}`} value={unit?.ID || ''}>
+          {unit?.name || 'Unknown'}
         </option>
       ))}
     </select>

@@ -42,6 +42,15 @@ export interface Task {
     arrival_number: number
     original_number: string
     summary: string
+    file_path?: string
+    document_type?: {
+      ID: number
+      name: string
+    }
+    issuing_unit?: {
+      ID: number
+      name: string
+    }
   }
   comments: Comment[]
   status_history: TaskStatusHistory[]
@@ -146,7 +155,15 @@ export interface UpdateProcessingContentRequest {
 export const tasksApi = {
   getTasks: async (): Promise<Task[]> => {
     const response = await apiClient.get('/tasks')
-    return response.data
+    // Handle both array response and paginated response
+    if (Array.isArray(response.data)) {
+      return response.data
+    } else if (response.data && Array.isArray(response.data.tasks)) {
+      return response.data.tasks
+    } else {
+      console.warn('Unexpected tasks API response format:', response.data)
+      return []
+    }
   },
 
   getTask: async (id: number): Promise<Task> => {

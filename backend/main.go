@@ -70,6 +70,9 @@ func main() {
 		api.GET("/tasks/:id/history", controllers.GetTaskStatusHistory)
 		api.POST("/tasks/:id/comments", controllers.CreateComment)
 		api.GET("/tasks/:id/comments", controllers.GetTaskComments)
+		api.GET("/tasks/:id/documents", controllers.GetTaskDocuments)
+		api.GET("/tasks/:id/download/incoming", controllers.DownloadTaskIncomingDocument)
+		api.GET("/tasks/:id/download/outgoing", controllers.DownloadTaskOutgoingDocument)
 
 		// Enhanced File routes
 		api.POST("/files/upload", controllers.EnhancedUploadFile)

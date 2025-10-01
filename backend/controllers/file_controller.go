@@ -204,8 +204,28 @@ func UploadReportFile(c *gin.Context) {
 }
 
 func GetIncomingFiles(c *gin.Context) {
-	var files []models.IncomingFile
-	if err := database.DB.Preload("User").Order("order_number desc").Find(&files).Error; err != nil {
+	// Query the new files table for incoming documents
+	var files []struct {
+		ID           uint   `json:"id"`
+		OriginalName string `json:"original_name"`
+		FileName     string `json:"file_name"`
+		FilePath     string `json:"file_path"`
+		FileSize     int64  `json:"file_size"`
+		MimeType     string `json:"mime_type"`
+		UploadedAt   string `json:"uploaded_at"`
+		DocumentID   int    `json:"document_id"`
+		UploadedBy   uint   `json:"uploaded_by"`
+	}
+
+	query := `
+		SELECT id, original_name, file_name, file_path, file_size, mime_type, 
+		       uploaded_at, document_id, uploaded_by
+		FROM files 
+		WHERE document_type = 'incoming' AND deleted_at IS NULL
+		ORDER BY uploaded_at DESC
+	`
+
+	if err := database.DB.Raw(query).Scan(&files).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể lấy danh sách file"})
 		return
 	}

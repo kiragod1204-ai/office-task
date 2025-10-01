@@ -111,7 +111,15 @@ export const EnhancedTaskForm: React.FC<EnhancedTaskFormProps> = ({
 
     setLoading(true)
     try {
-      const task = await tasksApi.createTask(formData)
+      // Format the deadline properly for the backend
+      const submitData = { ...formData }
+      if (submitData.deadline && submitData.deadline_type === 'specific') {
+        // Convert datetime-local to ISO string with timezone
+        const deadlineDate = new Date(submitData.deadline)
+        submitData.deadline = deadlineDate.toISOString()
+      }
+      
+      const task = await tasksApi.createTask(submitData)
       
       toast({
         title: "Tạo công việc thành công",

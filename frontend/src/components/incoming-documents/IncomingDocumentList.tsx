@@ -36,6 +36,7 @@ interface IncomingDocumentListProps {
   onView?: (document: IncomingDocument) => void;
   onDelete?: (document: IncomingDocument) => void;
   onAssignProcessor?: (document: IncomingDocument) => void;
+  refreshKey?: number;
 }
 
 export const IncomingDocumentList: React.FC<IncomingDocumentListProps> = ({
@@ -43,6 +44,7 @@ export const IncomingDocumentList: React.FC<IncomingDocumentListProps> = ({
   onView,
   onDelete,
   onAssignProcessor,
+  refreshKey,
 }) => {
   const { toast } = useToast();
   const [documents, setDocuments] = useState<IncomingDocument[]>([]);
@@ -65,6 +67,13 @@ export const IncomingDocumentList: React.FC<IncomingDocumentListProps> = ({
   useEffect(() => {
     loadDocuments();
   }, [filters]);
+
+  // Reload when refreshKey changes
+  useEffect(() => {
+    if (refreshKey && refreshKey > 0) {
+      loadDocuments();
+    }
+  }, [refreshKey]);
 
   const loadDocuments = async () => {
     try {
@@ -104,31 +113,53 @@ export const IncomingDocumentList: React.FC<IncomingDocumentListProps> = ({
     }));
   };
 
-  const handleDownloadFile = async (document: IncomingDocument) => {
-    if (!document.file_path) {
-      toast({
-        title: 'Thông báo',
-        description: 'Văn bản này chưa có file đính kèm',
-        variant: 'default',
-      });
-      return;
-    }
 
+
+  const handleDownloadFiles = async (document: IncomingDocument) => {
     try {
-      const blob = await incomingDocumentApi.downloadFile(document.file_path);
-      const url = window.URL.createObjectURL(blob);
-      const a = window.document.createElement('a');
-      a.href = url;
-      a.download = `${document.original_number}_${document.arrival_number}.pdf`;
-      window.document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      window.document.body.removeChild(a);
+      // Import the files API
+      const { getFilesByDocument, downloadFile } = await import('../../api/files');
+      
+      // Get all files for this document
+      const files = await getFilesByDocument('incoming', document.ID);
+      
+      if (files.length === 0) {
+        toast({
+          title: 'Thông báo',
+          description: 'Văn bản này chưa có file đính kèm',
+          variant: 'default',
+        });
+        return;
+      }
+
+      // If only one file, download it directly
+      if (files.length === 1) {
+        await downloadFile(files[0].file_path, files[0].original_name);
+        toast({
+          title: 'Thành công',
+          description: 'Tải file thành công',
+        });
+        return;
+      }
+
+      // If multiple files, download them one by one
+      for (const file of files) {
+        try {
+          await downloadFile(file.file_path, file.original_name);
+        } catch (error) {
+          console.error(`Error downloading file ${file.original_name}:`, error);
+        }
+      }
+      
+      toast({
+        title: 'Thành công',
+        description: `Tải xuống ${files.length} files thành công`,
+      });
     } catch (error) {
-      console.error('Error downloading file:', error);
+      console.error('Error downloading files:', error);
       toast({
         title: 'Lỗi',
-        description: 'Không thể tải file xuống',
+        description: 'Không thể tải files xuống',
         variant: 'destructive',
       });
     }
@@ -390,15 +421,14 @@ export const IncomingDocumentList: React.FC<IncomingDocumentListProps> = ({
                         </Button>
                       )}
 
-                      {document.file_path && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDownloadFile(document)}
-                        >
-                          <Download className="w-4 h-4" />
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownloadFiles(document)}
+                        title="Tải xuống files"
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
 
                       {onDelete && (
                         <Button

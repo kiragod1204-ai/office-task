@@ -32,6 +32,7 @@ import apiClient from '@/api/client'
 import { usersApi, User as UserType } from '@/api/users'
 import { TaskManagementActions } from '@/components/TaskManagementActions'
 import { TaskStatusHistory } from '@/components/tasks/TaskStatusHistory'
+import { ViewTaskDocuments } from '@/components/common/ViewTaskDocuments'
 
 export const TaskDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -265,6 +266,72 @@ export const TaskDetailPage: React.FC = () => {
     }
   }
 
+  const handleDownloadIncomingDocument = async () => {
+    if (!task) return
+    setDownloadingFile('incoming')
+    try {
+      const response = await apiClient.get(`/tasks/${task.ID}/download/incoming`, {
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `van-ban-den-${task.incoming_document?.arrival_number}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      toast({
+        title: "Tải xuống thành công",
+        description: "Văn bản đến đã được tải xuống",
+      })
+    } catch (error) {
+      console.error('Download failed:', error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi tải xuống",
+        description: "Không thể tải xuống văn bản đến. Vui lòng thử lại.",
+      })
+    } finally {
+      setDownloadingFile(null)
+    }
+  }
+
+  const handleDownloadOutgoingDocument = async () => {
+    if (!task) return
+    setDownloadingFile('outgoing')
+    try {
+      const response = await apiClient.get(`/tasks/${task.ID}/download/outgoing`, {
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `van-ban-di-${task.ID}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      toast({
+        title: "Tải xuống thành công",
+        description: "Văn bản đi đã được tải xuống",
+      })
+    } catch (error) {
+      console.error('Download failed:', error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi tải xuống",
+        description: "Không thể tải xuống văn bản đi. Vui lòng thử lại.",
+      })
+    } finally {
+      setDownloadingFile(null)
+    }
+  }
+
   const canUpdateStatus = () => {
     if (!user || !task) return false
     
@@ -413,40 +480,18 @@ export const TaskDetailPage: React.FC = () => {
             </Card>
           )}
 
-          {/* Files */}
+          {/* Task Documents */}
+          <ViewTaskDocuments taskId={task.ID} />
+
+          {/* Report File */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
                 <FileText className="w-5 h-5 mr-2" />
-                Tài liệu
+                File báo cáo
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Incoming File */}
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium">Văn bản đến</h4>
-                    <p className="text-sm text-gray-600">
-                      Số: {task.incoming_file?.order_number} - {task.incoming_file?.file_name}
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDownloadFile(
-                      `/api/files/download/${task.incoming_file?.ID}`,
-                      task.incoming_file?.file_name || 'file'
-                    )}
-                    disabled={downloadingFile === `/api/files/download/${task.incoming_file?.ID}`}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    {downloadingFile === `/api/files/download/${task.incoming_file?.ID}` ? 'Đang tải...' : 'Tải xuống'}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Report File */}
+            <CardContent>
               <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -784,6 +829,104 @@ export const TaskDetailPage: React.FC = () => {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// OutgoingDocumentSection component
+interface OutgoingDocumentSectionProps {
+  taskId: number
+  onDownload: () => void
+  downloadingFile: string | null
+}
+
+const OutgoingDocumentSection: React.FC<OutgoingDocumentSectionProps> = ({ 
+  taskId, 
+  onDownload, 
+  downloadingFile 
+}) => {
+  const [outgoingDocs, setOutgoingDocs] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const fetchOutgoingDocs = async () => {
+      setLoading(true)
+      try {
+        const response = await apiClient.get(`/tasks/${taskId}/documents`)
+        setOutgoingDocs(response.data.outgoing_documents || [])
+      } catch (error) {
+        console.error('Error fetching outgoing documents:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchOutgoingDocs()
+  }, [taskId])
+
+  if (loading) {
+    return (
+      <div className="border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center justify-center">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-sm text-gray-600">Đang tải văn bản đi...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (outgoingDocs.length === 0) {
+    return (
+      <div className="border border-gray-200 rounded-lg p-4">
+        <div className="text-center text-gray-500">
+          <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+          <p className="text-sm">Chưa có văn bản đi liên quan</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {outgoingDocs.map((doc, index) => (
+        <div key={doc.ID || index} className="border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium">Văn bản đi</h4>
+              <p className="text-sm text-gray-600">
+                Số: {doc.document_number}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                {doc.summary}
+              </p>
+              {doc.document_type && (
+                <p className="text-xs text-blue-600 mt-1">
+                  Loại: {doc.document_type.name}
+                </p>
+              )}
+              {doc.issuing_unit && (
+                <p className="text-xs text-green-600 mt-1">
+                  Đơn vị: {doc.issuing_unit.name}
+                </p>
+              )}
+              <p className="text-xs text-gray-400 mt-1">
+                Trạng thái: {doc.status}
+              </p>
+            </div>
+            {doc.file_path && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onDownload}
+                disabled={downloadingFile === 'outgoing'}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {downloadingFile === 'outgoing' ? 'Đang tải...' : 'Tải xuống'}
+              </Button>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

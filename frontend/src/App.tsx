@@ -10,6 +10,8 @@ import { TaskDetailPage } from '@/pages/TaskDetailPage'
 import { CreateTaskPage } from '@/pages/CreateTaskPage'
 import { UserManagementPage as UsersPage } from '@/pages/UserManagementPage'
 import { IncomingFilesPage } from '@/pages/IncomingFilesPage'
+import { IncomingDocumentsPage } from '@/pages/IncomingDocumentsPage'
+import { OutgoingDocumentsPage } from '@/pages/OutgoingDocumentsPage'
 import ConfigurationPage from '@/pages/ConfigurationPage'
 import AuditPage from '@/pages/AuditPage'
 import { SessionTimeoutHandler } from '@/components/SessionTimeoutHandler'
@@ -87,6 +89,22 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <IncomingFilesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/incoming-documents"
+        element={
+          <ProtectedRoute>
+            <IncomingDocumentsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/outgoing-documents"
+        element={
+          <ProtectedRoute>
+            <OutgoingDocumentsPage />
           </ProtectedRoute>
         }
       />

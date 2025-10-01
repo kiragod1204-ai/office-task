@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { IncomingDocumentForm } from './IncomingDocumentForm';
 import { IncomingDocumentList } from './IncomingDocumentList';
 import { ProcessorAssignmentDialog } from './ProcessorAssignmentDialog';
+import { ViewDocumentFiles } from '../common/ViewDocumentFiles';
 import { 
   IncomingDocument, 
   CreateIncomingDocumentRequest, 
@@ -24,31 +25,12 @@ export const IncomingDocumentManagement: React.FC = () => {
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<IncomingDocument | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Check if user can create documents (Secretary or Admin)
   const canCreateDocument = user?.role === 'Văn thư' || user?.role === 'Quản trị viên';
   
-  // Check if user can edit documents
-  const canEditDocument = (document: IncomingDocument) => {
-    if (user?.role === 'Văn thư' || user?.role === 'Quản trị viên') {
-      return true;
-    }
-    if (user?.role === 'Trưởng Công An Xã' || user?.role === 'Phó Công An Xã') {
-      return document.processor_id === user.id || document.created_by_id === user.id;
-    }
-    return false;
-  };
 
-  // Check if user can delete documents
-  const canDeleteDocument = (document: IncomingDocument) => {
-    if (user?.role === 'Văn thư' || user?.role === 'Quản trị viên') {
-      return true;
-    }
-    if (user?.role === 'Trưởng Công An Xã') {
-      return document.created_by_id === user.id;
-    }
-    return false;
-  };
 
   // Check if user can assign processors
   const canAssignProcessor = user?.role === 'Văn thư' || 
@@ -59,7 +41,7 @@ export const IncomingDocumentManagement: React.FC = () => {
   const handleCreateDocument = async (data: CreateIncomingDocumentRequest) => {
     try {
       setLoading(true);
-      await incomingDocumentApi.create(data);
+      const createdDocument = await incomingDocumentApi.create(data);
       
       toast({
         title: 'Thành công',
@@ -67,8 +49,10 @@ export const IncomingDocumentManagement: React.FC = () => {
       });
       
       setShowCreateDialog(false);
-      // Refresh the list by triggering a re-render
-      window.location.reload();
+      // Refresh the list
+      setRefreshKey(prev => prev + 1);
+      
+      return createdDocument;
     } catch (error: any) {
       console.error('Error creating document:', error);
       toast({
@@ -76,6 +60,7 @@ export const IncomingDocumentManagement: React.FC = () => {
         description: error.response?.data?.error || 'Không thể tạo văn bản đến',
         variant: 'destructive',
       });
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -86,7 +71,7 @@ export const IncomingDocumentManagement: React.FC = () => {
 
     try {
       setLoading(true);
-      await incomingDocumentApi.update(selectedDocument.ID, data);
+      const updatedDocument = await incomingDocumentApi.update(selectedDocument.ID, data);
       
       toast({
         title: 'Thành công',
@@ -95,8 +80,10 @@ export const IncomingDocumentManagement: React.FC = () => {
       
       setShowEditDialog(false);
       setSelectedDocument(null);
-      // Refresh the list by triggering a re-render
-      window.location.reload();
+      // Refresh the list
+      setRefreshKey(prev => prev + 1);
+      
+      return updatedDocument;
     } catch (error: any) {
       console.error('Error updating document:', error);
       toast({
@@ -104,6 +91,7 @@ export const IncomingDocumentManagement: React.FC = () => {
         description: error.response?.data?.error || 'Không thể cập nhật văn bản đến',
         variant: 'destructive',
       });
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -122,8 +110,8 @@ export const IncomingDocumentManagement: React.FC = () => {
         description: 'Xóa văn bản đến thành công',
       });
       
-      // Refresh the list by triggering a re-render
-      window.location.reload();
+      // Refresh the list
+      setRefreshKey(prev => prev + 1);
     } catch (error: any) {
       console.error('Error deleting document:', error);
       toast({
@@ -154,8 +142,25 @@ export const IncomingDocumentManagement: React.FC = () => {
       title: 'Thành công',
       description: 'Gán người xử lý thành công',
     });
-    // Refresh the list by triggering a re-render
-    window.location.reload();
+    // Refresh the list
+    setRefreshKey(prev => prev + 1);
+  };
+
+  const handleFileDownload = async (filePath: string, fileName: string) => {
+    try {
+      const { downloadFile } = await import('../../api/files');
+      await downloadFile(filePath, fileName);
+      toast({
+        title: 'Thành công',
+        description: 'Tải file thành công',
+      });
+    } catch (error) {
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể tải file xuống',
+        variant: 'destructive',
+      });
+    }
   };
 
 
@@ -185,9 +190,10 @@ export const IncomingDocumentManagement: React.FC = () => {
       {/* Document List */}
       <IncomingDocumentList
         onView={handleViewDocument}
-        onEdit={canEditDocument(selectedDocument || {} as IncomingDocument) ? handleEditDocument : undefined}
-        onDelete={canDeleteDocument(selectedDocument || {} as IncomingDocument) ? handleDeleteDocument : undefined}
+        onEdit={handleEditDocument}
+        onDelete={handleDeleteDocument}
         onAssignProcessor={canAssignProcessor ? handleAssignProcessor : undefined}
+        refreshKey={refreshKey}
       />
 
       {/* Create Document Dialog */}
@@ -279,38 +285,15 @@ export const IncomingDocumentManagement: React.FC = () => {
                 </div>
               )}
 
-              {selectedDocument.file_path && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">File đính kèm</label>
-                  <div className="mt-1">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        incomingDocumentApi.downloadFile(selectedDocument.file_path)
-                          .then(blob => {
-                            const url = window.URL.createObjectURL(blob);
-                            const a = window.document.createElement('a');
-                            a.href = url;
-                            a.download = `${selectedDocument.original_number}_${selectedDocument.arrival_number}.pdf`;
-                            window.document.body.appendChild(a);
-                            a.click();
-                            window.URL.revokeObjectURL(url);
-                            window.document.body.removeChild(a);
-                          })
-                          .catch(() => {
-                            toast({
-                              title: 'Lỗi',
-                              description: 'Không thể tải file xuống',
-                              variant: 'destructive',
-                            });
-                          });
-                      }}
-                    >
-                      Tải xuống file
-                    </Button>
-                  </div>
-                </div>
-              )}
+              {/* File Management Section */}
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Files đính kèm</label>
+                <ViewDocumentFiles 
+                  documentType="incoming"
+                  documentId={selectedDocument.ID}
+                  onDownload={handleFileDownload}
+                />
+              </div>
 
               <div className="flex justify-end">
                 <Button onClick={() => setShowViewDialog(false)}>

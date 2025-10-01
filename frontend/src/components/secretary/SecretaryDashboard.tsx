@@ -91,11 +91,11 @@ export const SecretaryDashboard: React.FC = () => {
           <p className="text-gray-600">Quản lý văn bản đến và văn bản đi</p>
         </div>
         <div className="flex space-x-2">
-          <Button onClick={() => navigate('/incoming-documents/new')}>
+          <Button onClick={() => navigate('/incoming-documents')}>
             <FilePlus className="w-4 h-4 mr-2" />
             Văn bản đến
           </Button>
-          <Button variant="outline" onClick={() => navigate('/outgoing-documents/new')}>
+          <Button variant="outline" onClick={() => navigate('/outgoing-documents')}>
             <FileUp className="w-4 h-4 mr-2" />
             Văn bản đi
           </Button>
@@ -181,7 +181,7 @@ export const SecretaryDashboard: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Button 
               className="h-auto p-4 flex flex-col items-center space-y-2"
-              onClick={() => navigate('/incoming-documents/new')}
+              onClick={() => navigate('/incoming-documents')}
             >
               <FileDown className="w-8 h-8" />
               <div className="text-center">

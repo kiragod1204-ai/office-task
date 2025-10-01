@@ -19,7 +19,7 @@ import { Loader2 } from 'lucide-react';
 
 interface IncomingDocumentFormProps {
   document?: IncomingDocument;
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: any) => Promise<any>;
   onCancel: () => void;
   isLoading?: boolean;
 }
@@ -35,6 +35,8 @@ export const IncomingDocumentForm: React.FC<IncomingDocumentFormProps> = ({
   const [loadingProcessors, setLoadingProcessors] = useState(false);
   const [documentFiles, setDocumentFiles] = useState<any[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
 
   const [formData, setFormData] = useState({
     arrival_date: document ? document.arrival_date.split('T')[0] : new Date().toISOString().split('T')[0],
@@ -44,7 +46,7 @@ export const IncomingDocumentForm: React.FC<IncomingDocumentFormProps> = ({
     issuing_unit_id: document?.issuing_unit_id || 0,
     summary: document?.summary || '',
     internal_notes: document?.internal_notes || '',
-    processor_id: document?.processor_id || undefined,
+    processor_id: document?.processor_id || undefined as number | undefined,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -99,11 +101,11 @@ export const IncomingDocumentForm: React.FC<IncomingDocumentFormProps> = ({
       newErrors.document_date = 'Ngày văn bản là bắt buộc';
     }
 
-    if (!formData.document_type_id) {
+    if (!formData.document_type_id || formData.document_type_id === 0) {
       newErrors.document_type_id = 'Loại văn bản là bắt buộc';
     }
 
-    if (!formData.issuing_unit_id) {
+    if (!formData.issuing_unit_id || formData.issuing_unit_id === 0) {
       newErrors.issuing_unit_id = 'Đơn vị ban hành là bắt buộc';
     }
 
@@ -125,10 +127,31 @@ export const IncomingDocumentForm: React.FC<IncomingDocumentFormProps> = ({
     try {
       const submitData = {
         ...formData,
+        document_type_id: formData.document_type_id || 0,
+        issuing_unit_id: formData.issuing_unit_id || 0,
         processor_id: formData.processor_id || undefined,
       };
 
-      await onSubmit(submitData);
+      const result = await onSubmit(submitData);
+      
+      // Debug logging
+      console.log('Form submission result:', result);
+      console.log('Selected files count:', selectedFiles.length);
+      console.log('Is new document:', !document?.ID);
+      
+      // If this is a new document and we have selected files, upload them
+      if (!document?.ID && selectedFiles.length > 0 && result && typeof result === 'object' && 'ID' in result) {
+        console.log('Uploading files for document ID:', result.ID);
+        await uploadSelectedFiles(result.ID as number);
+      } else {
+        console.log('File upload conditions not met:', {
+          isNewDocument: !document?.ID,
+          hasSelectedFiles: selectedFiles.length > 0,
+          hasResult: !!result,
+          resultType: typeof result,
+          hasID: result && typeof result === 'object' && 'ID' in result
+        });
+      }
     } catch (error) {
       console.error('Error submitting form:', error);
     }
@@ -178,6 +201,80 @@ export const IncomingDocumentForm: React.FC<IncomingDocumentFormProps> = ({
         description: 'Không thể xóa file',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    
+    // Validate files
+    const validFiles: File[] = [];
+    const allowedTypes = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.gif'];
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    
+    for (const file of files) {
+      const fileExt = '.' + file.name.split('.').pop()?.toLowerCase();
+      
+      if (!allowedTypes.includes(fileExt)) {
+        toast({
+          title: 'Lỗi',
+          description: `File "${file.name}" có định dạng không được hỗ trợ`,
+          variant: 'destructive',
+        });
+        continue;
+      }
+      
+      if (file.size > maxSize) {
+        toast({
+          title: 'Lỗi',
+          description: `File "${file.name}" vượt quá kích thước tối đa 50MB`,
+          variant: 'destructive',
+        });
+        continue;
+      }
+      
+      validFiles.push(file);
+    }
+    
+    setSelectedFiles(prev => [...prev, ...validFiles]);
+  };
+
+  const removeSelectedFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadSelectedFiles = async (documentId: number) => {
+    console.log('uploadSelectedFiles called with documentId:', documentId);
+    console.log('selectedFiles:', selectedFiles);
+    
+    if (selectedFiles.length === 0) return;
+    
+    setUploadingFiles(true);
+    const { uploadFile } = await import('../../api/files');
+    
+    try {
+      for (const file of selectedFiles) {
+        console.log('Uploading file:', file.name);
+        await uploadFile(file, 'incoming', documentId);
+        console.log('File uploaded successfully:', file.name);
+      }
+      
+      toast({
+        title: 'Thành công',
+        description: `Đã tải lên ${selectedFiles.length} file thành công`,
+      });
+      
+      setSelectedFiles([]);
+      loadDocumentFiles();
+    } catch (error) {
+      console.error('File upload error:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Có lỗi xảy ra khi tải file lên',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingFiles(false);
     }
   };
 
@@ -317,49 +414,112 @@ export const IncomingDocumentForm: React.FC<IncomingDocumentFormProps> = ({
           </div>
 
           {/* File Management */}
-          {document?.ID && (
-            <div className="space-y-4">
-              <Label>Quản lý tệp đính kèm</Label>
-              
-              {/* Enhanced File Upload */}
-              <EnhancedFileUpload
-                documentType="incoming"
-                documentId={document.ID}
-                onUploadSuccess={handleFileUploadSuccess}
-                onUploadError={handleFileUploadError}
-                maxFiles={5}
-                maxSize={50}
-                allowedTypes={['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.gif']}
-                showPreview={true}
-                className="border rounded-lg p-4"
-              />
-
-              {/* File Preview */}
-              {loadingFiles ? (
-                <div className="flex items-center justify-center p-4">
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                  <span className="ml-2">Đang tải files...</span>
-                </div>
-              ) : (
-                <FilePreview
-                  files={documentFiles}
-                  onDownload={handleFileDownload}
-                  onDelete={handleFileDelete}
-                  showActions={true}
-                  showThumbnails={true}
+          <div className="space-y-4">
+            <Label>Quản lý tệp đính kèm</Label>
+            
+            {document?.ID ? (
+              // Existing document - use enhanced file upload
+              <>
+                <EnhancedFileUpload
+                  documentType="incoming"
+                  documentId={document.ID}
+                  onUploadSuccess={handleFileUploadSuccess}
+                  onUploadError={handleFileUploadError}
+                  maxFiles={5}
+                  maxSize={50}
+                  allowedTypes={['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.gif']}
+                  showPreview={true}
                   className="border rounded-lg p-4"
                 />
-              )}
-            </div>
-          )}
 
-          {!document?.ID && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-700">
-                💡 Bạn có thể upload files sau khi tạo văn bản thành công.
-              </p>
-            </div>
-          )}
+                {/* File Preview */}
+                {loadingFiles ? (
+                  <div className="flex items-center justify-center p-4">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="ml-2">Đang tải files...</span>
+                  </div>
+                ) : (
+                  <FilePreview
+                    files={documentFiles}
+                    onDownload={handleFileDownload}
+                    onDelete={handleFileDelete}
+                    showActions={true}
+                    showThumbnails={true}
+                    className="border rounded-lg p-4"
+                  />
+                )}
+              </>
+            ) : (
+              // New document - file selection
+              <div className="border rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-medium">Chọn files đính kèm</h4>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Files sẽ được tải lên sau khi tạo văn bản thành công
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.document.getElementById('file-input')?.click()}
+                  >
+                    Chọn files
+                  </Button>
+                </div>
+                
+                <input
+                  id="file-input"
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                  onChange={handleFileSelection}
+                  className="hidden"
+                />
+                
+                {/* Selected Files Preview */}
+                {selectedFiles.length > 0 && (
+                  <div className="space-y-2">
+                    <h5 className="text-sm font-medium text-gray-700">
+                      Files đã chọn ({selectedFiles.length})
+                    </h5>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {selectedFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                          <div className="flex items-center space-x-2 flex-1 min-w-0">
+                            <div className="text-lg">📄</div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{file.name}</p>
+                              <p className="text-xs text-gray-500">
+                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeSelectedFile(index)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            ✕
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* File Upload Guidelines */}
+                <div className="text-xs text-gray-500 space-y-1">
+                  <p>• Định dạng hỗ trợ: PDF, DOC, DOCX, JPG, JPEG, PNG, GIF</p>
+                  <p>• Kích thước tối đa: 50MB mỗi file</p>
+                  <p>• Tối đa 5 files</p>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Form Actions */}
           <div className="flex justify-end gap-4">
@@ -373,10 +533,10 @@ export const IncomingDocumentForm: React.FC<IncomingDocumentFormProps> = ({
             </Button>
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || uploadingFiles}
             >
-              {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {document ? 'Cập nhật' : 'Tạo mới'}
+              {(isLoading || uploadingFiles) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {uploadingFiles ? 'Đang tải files...' : (isLoading ? 'Đang xử lý...' : (document ? 'Cập nhật' : 'Tạo mới'))}
             </Button>
           </div>
         </form>

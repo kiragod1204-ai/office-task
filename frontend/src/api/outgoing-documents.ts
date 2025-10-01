@@ -195,5 +195,13 @@ export const outgoingDocumentApi = {
   getApprovers: async (): Promise<User[]> => {
     const response = await apiClient.get('/outgoing-documents/approvers');
     return response.data;
+  },
+
+  // Download document file
+  downloadFile: async (filePath: string): Promise<Blob> => {
+    const response = await apiClient.get(`/files/download?path=${encodeURIComponent(filePath)}`, {
+      responseType: 'blob',
+    });
+    return response.data;
   }
 };

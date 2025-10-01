@@ -9,6 +9,7 @@ import { OutgoingDocumentForm } from './OutgoingDocumentForm';
 import { OutgoingDocumentList } from './OutgoingDocumentList';
 import { ApprovalWorkflow } from './ApprovalWorkflow';
 import { OutgoingDocumentFileUpload } from './OutgoingDocumentFileUpload';
+import { ViewDocumentFiles } from '../common/ViewDocumentFiles';
 
 type ViewMode = 'list' | 'create' | 'edit' | 'view' | 'approval' | 'upload';
 
@@ -130,6 +131,19 @@ export const OutgoingDocumentManagement: React.FC = () => {
     showNotification('error', error);
   };
 
+
+
+  const handleFileDownloadInView = async (filePath: string, fileName: string) => {
+    try {
+      const { downloadFile } = await import('../../api/files');
+      await downloadFile(filePath, fileName);
+      showNotification('success', 'Tải file thành công');
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      showNotification('error', 'Không thể tải file xuống');
+    }
+  };
+
   const renderContent = () => {
     switch (viewMode) {
       case 'create':
@@ -228,14 +242,14 @@ export const OutgoingDocumentManagement: React.FC = () => {
                   </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">File đính kèm</label>
-                  <p className="mt-1 text-sm text-gray-900">
-                    {selectedDocument.file_path ? (
-                      <span className="text-green-600">Đã có file</span>
-                    ) : (
-                      <span className="text-gray-500">Chưa có file</span>
-                    )}
-                  </p>
+                  <label className="block text-sm font-medium text-gray-700">Files đính kèm</label>
+                  <div className="mt-2">
+                    <ViewDocumentFiles 
+                      documentType="outgoing"
+                      documentId={selectedDocument.id}
+                      onDownload={handleFileDownloadInView}
+                    />
+                  </div>
                 </div>
               </div>
             </div>

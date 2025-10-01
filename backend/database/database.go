@@ -2,8 +2,10 @@ package database
 
 import (
 	"ai-code-agent-backend/models"
-	"io/ioutil"
+	"database/sql"
+	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,11 +16,70 @@ import (
 
 var DB *gorm.DB
 
+// createDatabaseIfNotExists creates the database if it doesn't exist
+func createDatabaseIfNotExists(host, port, user, password, dbName string) error {
+	// Connect to postgres database (default database)
+	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable",
+		host, port, user, password)
+
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		return fmt.Errorf("failed to connect to postgres database: %v", err)
+	}
+	defer db.Close()
+
+	// Check if database exists
+	var exists bool
+	query := "SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)"
+	err = db.QueryRow(query, dbName).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check if database exists: %v", err)
+	}
+
+	if !exists {
+		// Create the database
+		createQuery := fmt.Sprintf("CREATE DATABASE %s", dbName)
+		_, err = db.Exec(createQuery)
+		if err != nil {
+			return fmt.Errorf("failed to create database %s: %v", dbName, err)
+		}
+		log.Printf("Database '%s' created successfully", dbName)
+	} else {
+		log.Printf("Database '%s' already exists", dbName)
+	}
+
+	return nil
+}
+
+// getEnvOrDefault returns environment variable value or default if not set
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
 func InitDatabase() {
 	var err error
 
+	// Database configuration with environment variable support
+	dbHost := getEnvOrDefault("DB_HOST", "localhost")
+	dbPort := getEnvOrDefault("DB_PORT", "5430")
+	dbUser := getEnvOrDefault("DB_USER", "postgres")
+	dbPassword := getEnvOrDefault("DB_PASSWORD", "password")
+	dbName := getEnvOrDefault("DB_NAME", "docments")
+
+	log.Printf("Attempting to connect to database: %s@%s:%s/%s", dbUser, dbHost, dbPort, dbName)
+
+	// First, try to create the database if it doesn't exist
+	err = createDatabaseIfNotExists(dbHost, dbPort, dbUser, dbPassword, dbName)
+	if err != nil {
+		log.Printf("Warning: Could not create database: %v", err)
+	}
+
 	// PostgreSQL connection string
-	dbURL := "postgresql://dev_user:dev_password@5.189.151.150:5433/ai_code_agent?sslmode=disable"
+	dbURL := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=disable",
+		dbUser, dbPassword, dbHost, dbPort, dbName)
 
 	DB, err = gorm.Open("postgres", dbURL)
 	if err != nil {
@@ -82,7 +143,7 @@ func runMigrations() {
 	migrationPath := filepath.Join("database", "migrations", "001_enhance_schema.sql")
 
 	// Read the migration file
-	migrationSQL, err := ioutil.ReadFile(migrationPath)
+	migrationSQL, err := os.ReadFile(migrationPath)
 	if err != nil {
 		log.Printf("Warning: Could not read migration file %s: %v", migrationPath, err)
 		return

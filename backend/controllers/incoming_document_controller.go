@@ -4,6 +4,7 @@ import (
 	"ai-code-agent-backend/database"
 	"ai-code-agent-backend/models"
 	"ai-code-agent-backend/services"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -46,7 +47,18 @@ func CreateIncomingDocument(c *gin.Context) {
 		return
 	}
 
-	userID, _ := c.Get("user_id")
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Không thể xác định người dùng"})
+		return
+	}
+
+	// Verify user exists
+	var user models.User
+	if err := database.DB.First(&user, userID.(uint)).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Người dùng không tồn tại"})
+		return
+	}
 
 	// Parse dates
 	arrivalDate, err := time.Parse("2006-01-02", req.ArrivalDate)
@@ -61,11 +73,6 @@ func CreateIncomingDocument(c *gin.Context) {
 		return
 	}
 
-	// Generate auto-increment arrival number
-	var lastDoc models.IncomingDocument
-	database.DB.Order("arrival_number desc").First(&lastDoc)
-	arrivalNumber := lastDoc.ArrivalNumber + 1
-
 	// Validate processor if provided (must be Team Leader or Deputy)
 	if req.ProcessorID != nil {
 		var processor models.User
@@ -79,7 +86,27 @@ func CreateIncomingDocument(c *gin.Context) {
 		}
 	}
 
-	// Create incoming document
+	// Use database transaction to atomically generate arrival number
+	tx := database.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Get next arrival number using raw SQL for better atomicity
+	var result struct {
+		NextNumber int `gorm:"column:next_number"`
+	}
+	err = tx.Raw("SELECT COALESCE(MAX(arrival_number), 0) + 1 as next_number FROM incoming_documents").Scan(&result).Error
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể tạo số đến"})
+		return
+	}
+	arrivalNumber := result.NextNumber
+
+	// Create the document
 	incomingDoc := models.IncomingDocument{
 		ArrivalDate:    arrivalDate,
 		ArrivalNumber:  arrivalNumber,
@@ -99,13 +126,46 @@ func CreateIncomingDocument(c *gin.Context) {
 		incomingDoc.Status = models.IncomingStatusForwarded
 	}
 
-	if err := database.DB.Create(&incomingDoc).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể tạo văn bản đến"})
+	// Create the document within the transaction
+	if err := tx.Create(&incomingDoc).Error; err != nil {
+		tx.Rollback()
+		if database.IsUniqueConstraintError(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": "Số đến đã tồn tại, vui lòng thử lại"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể tạo văn bản đến: " + err.Error()})
+		}
 		return
 	}
 
-	// Load relations
-	database.DB.Preload("DocumentType").Preload("IssuingUnit").Preload("Processor").Preload("CreatedBy").First(&incomingDoc, incomingDoc.ID)
+	// Commit the transaction
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể hoàn tất tạo văn bản đến"})
+		return
+	}
+
+	// Load relations with explicit error handling
+	if err := database.DB.Preload("DocumentType").First(&incomingDoc, incomingDoc.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể tải loại văn bản"})
+		return
+	}
+
+	if err := database.DB.Preload("IssuingUnit").First(&incomingDoc, incomingDoc.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể tải đơn vị ban hành"})
+		return
+	}
+
+	// Load processor if exists
+	if incomingDoc.ProcessorID != nil {
+		database.DB.Preload("Processor").First(&incomingDoc, incomingDoc.ID)
+	}
+
+	// Load CreatedBy explicitly
+	var createdByUser models.User
+	if err := database.DB.First(&createdByUser, incomingDoc.CreatedByID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể tải thông tin người tạo"})
+		return
+	}
+	incomingDoc.CreatedBy = createdByUser
 
 	c.JSON(http.StatusCreated, incomingDoc)
 }
@@ -154,6 +214,14 @@ func GetIncomingDocuments(c *gin.Context) {
 		return
 	}
 
+	// Load CreatedBy for each document explicitly
+	for i := range documents {
+		var createdByUser models.User
+		if err := database.DB.First(&createdByUser, documents[i].CreatedByID).Error; err == nil {
+			documents[i].CreatedBy = createdByUser
+		}
+	}
+
 	// Return response with pagination info
 	response := gin.H{
 		"documents":  documents,
@@ -172,9 +240,15 @@ func GetIncomingDocument(c *gin.Context) {
 	}
 
 	var document models.IncomingDocument
-	if err := database.DB.Preload("DocumentType").Preload("IssuingUnit").Preload("Processor").Preload("CreatedBy").Preload("Tasks.AssignedTo").First(&document, id).Error; err != nil {
+	if err := database.DB.Preload("DocumentType").Preload("IssuingUnit").Preload("Processor").Preload("Tasks.AssignedTo").First(&document, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy văn bản đến"})
 		return
+	}
+
+	// Load CreatedBy explicitly
+	var createdByUser models.User
+	if err := database.DB.First(&createdByUser, document.CreatedByID).Error; err == nil {
+		document.CreatedBy = createdByUser
 	}
 
 	c.JSON(http.StatusOK, document)
@@ -270,7 +344,13 @@ func UpdateIncomingDocument(c *gin.Context) {
 	}
 
 	// Load relations
-	database.DB.Preload("DocumentType").Preload("IssuingUnit").Preload("Processor").Preload("CreatedBy").First(&document, document.ID)
+	database.DB.Preload("DocumentType").Preload("IssuingUnit").Preload("Processor").First(&document, document.ID)
+
+	// Load CreatedBy explicitly
+	var createdByUser models.User
+	if err := database.DB.First(&createdByUser, document.CreatedByID).Error; err == nil {
+		document.CreatedBy = createdByUser
+	}
 
 	c.JSON(http.StatusOK, document)
 }
@@ -318,7 +398,13 @@ func AssignProcessor(c *gin.Context) {
 	}
 
 	// Load relations
-	database.DB.Preload("DocumentType").Preload("IssuingUnit").Preload("Processor").Preload("CreatedBy").First(&document, document.ID)
+	database.DB.Preload("DocumentType").Preload("IssuingUnit").Preload("Processor").First(&document, document.ID)
+
+	// Load CreatedBy explicitly
+	var createdByUser models.User
+	if err := database.DB.First(&createdByUser, document.CreatedByID).Error; err == nil {
+		document.CreatedBy = createdByUser
+	}
 
 	c.JSON(http.StatusOK, document)
 }
@@ -355,22 +441,69 @@ func DeleteIncomingDocument(c *gin.Context) {
 		return
 	}
 
-	// Check if document has related tasks
-	var taskCount int64
-	database.DB.Model(&models.Task{}).Where("incoming_document_id = ?", id).Count(&taskCount)
-	if taskCount > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Không thể xóa văn bản đã có công việc liên quan"})
-		return
+	// Check if document has related tasks (including soft-deleted tasks)
+	var tasks []models.Task
+	database.DB.Unscoped().Where("incoming_document_id = ?", id).Find(&tasks)
+
+	if len(tasks) > 0 {
+		// Get active (non-deleted) tasks
+		var activeTasks []models.Task
+		database.DB.Where("incoming_document_id = ?", id).Find(&activeTasks)
+
+		if len(activeTasks) > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":         fmt.Sprintf("Không thể xóa văn bản đã có %d công việc liên quan. Vui lòng xóa các công việc liên quan trước.", len(activeTasks)),
+				"related_tasks": len(activeTasks),
+			})
+			return
+		}
 	}
 
-	// Delete file if exists
+	// Start transaction for safe deletion
+	tx := database.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Delete associated files from the new file system
+	var associatedFiles []struct {
+		FilePath string `json:"file_path"`
+	}
+
+	// Get all files associated with this document
+	if err := tx.Raw("SELECT file_path FROM files WHERE document_type = 'incoming' AND document_id = ? AND deleted_at IS NULL", id).Scan(&associatedFiles).Error; err == nil {
+		// Mark files as deleted in database (soft delete)
+		if err := tx.Exec("UPDATE files SET deleted_at = NOW() WHERE document_type = 'incoming' AND document_id = ?", id).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể xóa files liên quan"})
+			return
+		}
+
+		// Delete physical files
+		for _, file := range associatedFiles {
+			if file.FilePath != "" {
+				os.Remove(file.FilePath)
+			}
+		}
+	}
+
+	// Delete legacy file if exists
 	if document.FilePath != "" {
 		os.Remove(document.FilePath)
 	}
 
-	// Delete the document
-	if err := database.DB.Delete(&document).Error; err != nil {
+	// Delete the document (soft delete)
+	if err := tx.Delete(&document).Error; err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể xóa văn bản đến"})
+		return
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể hoàn tất xóa văn bản"})
 		return
 	}
 

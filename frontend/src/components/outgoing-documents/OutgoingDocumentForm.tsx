@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  CreateOutgoingDocumentRequest, 
   OutgoingDocument,
   outgoingDocumentApi,
   User
 } from '../../api/outgoing-documents';
 import { DocumentTypeSelect } from '../common/DocumentTypeSelect';
 import { IssuingUnitSelect } from '../common/IssuingUnitSelect';
+import EnhancedFileUpload from '../common/EnhancedFileUpload';
+import FilePreview from '../common/FilePreview';
+import { getFilesByDocument, downloadFile, deleteFile } from '../../api/files';
+import { useToast } from '../../hooks/use-toast';
+import { Loader2 } from 'lucide-react';
 
 interface OutgoingDocumentFormProps {
   document?: OutgoingDocument;
@@ -21,7 +25,8 @@ export const OutgoingDocumentForm: React.FC<OutgoingDocumentFormProps> = ({
   onCancel,
   isLoading = false
 }) => {
-  const [formData, setFormData] = useState<CreateOutgoingDocumentRequest>({
+  const { toast } = useToast();
+  const [formData, setFormData] = useState({
     document_number: '',
     issue_date: new Date().toISOString().split('T')[0],
     document_type_id: 0,
@@ -36,6 +41,8 @@ export const OutgoingDocumentForm: React.FC<OutgoingDocumentFormProps> = ({
   const [approvers, setApprovers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [documentFiles, setDocumentFiles] = useState<any[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
 
   // Load drafters and approvers
   useEffect(() => {
@@ -56,7 +63,10 @@ export const OutgoingDocumentForm: React.FC<OutgoingDocumentFormProps> = ({
     };
 
     loadUsers();
-  }, []);
+    if (document?.id) {
+      loadDocumentFiles();
+    }
+  }, [document?.id]);
 
   // Initialize form data when editing
   useEffect(() => {
@@ -114,6 +124,67 @@ export const OutgoingDocumentForm: React.FC<OutgoingDocumentFormProps> = ({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const loadDocumentFiles = async () => {
+    if (!document?.id) return;
+    
+    try {
+      setLoadingFiles(true);
+      const files = await getFilesByDocument('outgoing', document.id);
+      setDocumentFiles(files);
+    } catch (error) {
+      console.error('Error loading document files:', error);
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
+  const handleFileUploadSuccess = () => {
+    toast({
+      title: 'Thành công',
+      description: 'Tải file lên thành công',
+    });
+    // Reload files to show the new upload
+    loadDocumentFiles();
+  };
+
+  const handleFileUploadError = (error: string) => {
+    toast({
+      title: 'Lỗi',
+      description: error,
+      variant: 'destructive',
+    });
+  };
+
+  const handleFileDownload = async (filePath: string, fileName: string) => {
+    try {
+      await downloadFile(filePath, fileName);
+    } catch (error) {
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể tải file xuống',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleFileDelete = async (filePath: string) => {
+    try {
+      await deleteFile(filePath);
+      toast({
+        title: 'Thành công',
+        description: 'Xóa file thành công',
+      });
+      // Reload files to reflect the deletion
+      loadDocumentFiles();
+    } catch (error) {
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể xóa file',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -312,6 +383,51 @@ export const OutgoingDocumentForm: React.FC<OutgoingDocumentFormProps> = ({
           placeholder="Nhập ghi chú nội bộ (tùy chọn)"
         />
       </div>
+
+      {/* File Management */}
+      {document?.id && (
+        <div className="space-y-4">
+          <label className="block text-sm font-medium text-gray-700">Quản lý tệp đính kèm</label>
+          
+          {/* Enhanced File Upload */}
+          <EnhancedFileUpload
+            documentType="outgoing"
+            documentId={document.id}
+            onUploadSuccess={handleFileUploadSuccess}
+            onUploadError={handleFileUploadError}
+            maxFiles={5}
+            maxSize={50}
+            allowedTypes={['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.gif']}
+            showPreview={true}
+            className="border rounded-lg p-4"
+          />
+
+          {/* File Preview */}
+          {loadingFiles ? (
+            <div className="flex items-center justify-center p-4">
+              <Loader2 className="w-6 h-6 animate-spin" />
+              <span className="ml-2">Đang tải files...</span>
+            </div>
+          ) : (
+            <FilePreview
+              files={documentFiles}
+              onDownload={handleFileDownload}
+              onDelete={handleFileDelete}
+              showActions={true}
+              showThumbnails={true}
+              className="border rounded-lg p-4"
+            />
+          )}
+        </div>
+      )}
+
+      {!document?.id && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-700">
+            💡 Bạn có thể upload files sau khi tạo văn bản thành công.
+          </p>
+        </div>
+      )}
 
       {/* Form Actions */}
       <div className="flex justify-end space-x-3 pt-4 border-t">

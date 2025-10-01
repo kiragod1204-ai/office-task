@@ -45,26 +45,42 @@ export const DashboardPage: React.FC = () => {
   }, [])
 
   useEffect(() => {
+    let isMounted = true
+    
     const fetchDashboardData = async () => {
       try {
         const [tasksData, statsData] = await Promise.all([
           tasksApi.getTasks(),
           dashboardApi.getStats()
         ])
-        setTasks(Array.isArray(tasksData) ? tasksData : [])
-        setDashboardStats(statsData)
+        if (isMounted) {
+          setTasks(Array.isArray(tasksData) ? tasksData : [])
+          setDashboardStats(statsData)
+        }
       } catch (error) {
-        console.error('Error fetching dashboard data:', error)
+        if (isMounted) {
+          console.error('Error fetching dashboard data:', error)
+        }
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
     fetchDashboardData()
 
     // Refresh data every 5 minutes
-    const interval = setInterval(fetchDashboardData, 5 * 60 * 1000)
-    return () => clearInterval(interval)
+    const interval = setInterval(() => {
+      if (isMounted) {
+        fetchDashboardData()
+      }
+    }, 5 * 60 * 1000)
+    
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
   }, [])
 
   if (loading) {

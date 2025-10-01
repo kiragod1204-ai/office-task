@@ -37,20 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     authApi.logout()
   }, [])
 
-  const checkSessionExpiry = useCallback(() => {
-    const loginTime = localStorage.getItem('loginTime')
-    if (loginTime) {
-      const currentTime = Date.now()
-      const timeDiff = currentTime - parseInt(loginTime)
-      
-      if (timeDiff > SESSION_TIMEOUT) {
-        setIsSessionExpired(true)
-        logout()
-        return true
-      }
-    }
-    return false
-  }, [logout, SESSION_TIMEOUT])
+
 
   const refreshSession = useCallback(async () => {
     try {
@@ -82,16 +69,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (savedToken && savedUser) {
         // Check session expiry
-        if (!checkSessionExpiry()) {
-          setToken(savedToken)
-          const userData = JSON.parse(savedUser)
+        const loginTime = localStorage.getItem('loginTime')
+        if (loginTime) {
+          const currentTime = Date.now()
+          const timeDiff = currentTime - parseInt(loginTime)
           
-          // Check if user is still active
-          if (userData.is_active) {
-            setUser(userData)
-          } else {
-            logout()
+          if (timeDiff > SESSION_TIMEOUT) {
+            // Session expired
+            setUser(null)
+            setToken(null)
+            setIsSessionExpired(true)
+            authApi.logout()
+            setLoading(false)
+            return
           }
+        }
+
+        setToken(savedToken)
+        const userData = JSON.parse(savedUser)
+        
+        // Check if user is still active
+        if (userData.is_active) {
+          setUser(userData)
+        } else {
+          setUser(null)
+          setToken(null)
+          authApi.logout()
         }
       }
 
@@ -99,18 +102,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     initAuth()
-  }, [checkSessionExpiry, logout])
+  }, []) // Remove dependencies to prevent infinite loop
 
   // Set up session check interval
   useEffect(() => {
     if (token) {
       const interval = setInterval(() => {
-        checkSessionExpiry()
+        const loginTime = localStorage.getItem('loginTime')
+        if (loginTime) {
+          const currentTime = Date.now()
+          const timeDiff = currentTime - parseInt(loginTime)
+          
+          if (timeDiff > SESSION_TIMEOUT) {
+            setIsSessionExpired(true)
+            setUser(null)
+            setToken(null)
+            authApi.logout()
+          }
+        }
       }, 60000) // Check every minute
 
       return () => clearInterval(interval)
     }
-  }, [token, checkSessionExpiry])
+  }, [token]) // Remove checkSessionExpiry dependency
 
   const login = async (username: string, password: string, showPassword?: boolean) => {
     try {

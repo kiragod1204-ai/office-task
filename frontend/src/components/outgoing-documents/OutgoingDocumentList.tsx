@@ -95,6 +95,52 @@ export const OutgoingDocumentList: React.FC<OutgoingDocumentListProps> = ({
     return new Date(dateString).toLocaleDateString('vi-VN');
   };
 
+  const handleDownloadFile = async (document: OutgoingDocument) => {
+    try {
+      // Import the files API
+      const { getFilesByDocument, downloadFile } = await import('../../api/files');
+      
+      // Get all files for this document
+      const files = await getFilesByDocument('outgoing', document.id);
+      
+      if (files.length === 0) {
+        // Fallback to old file_path if no files found in new system
+        if (document.file_path) {
+          const blob = await outgoingDocumentApi.downloadFile(document.file_path);
+          const url = window.URL.createObjectURL(blob);
+          const a = window.document.createElement('a');
+          a.href = url;
+          a.download = `${document.document_number}.pdf`;
+          window.document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          window.document.body.removeChild(a);
+          return;
+        }
+        
+        console.log('No files found for this document');
+        return;
+      }
+
+      // If only one file, download it directly
+      if (files.length === 1) {
+        await downloadFile(files[0].file_path, files[0].original_name);
+        return;
+      }
+
+      // If multiple files, download them one by one
+      for (const file of files) {
+        try {
+          await downloadFile(file.file_path, file.original_name);
+        } catch (error) {
+          console.error(`Error downloading file ${file.original_name}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('Error downloading files:', error);
+    }
+  };
+
   if (loading && documents.length === 0) {
     return (
       <div className="flex justify-center items-center p-8">
@@ -297,6 +343,13 @@ export const OutgoingDocumentList: React.FC<OutgoingDocumentListProps> = ({
                         Sửa
                       </button>
                     )}
+                    <button
+                      onClick={() => handleDownloadFile(document)}
+                      className="text-purple-600 hover:text-purple-900"
+                      title="Tải xuống files"
+                    >
+                      Tải xuống
+                    </button>
                     {onApprovalAction && (document.status === OUTGOING_STATUS.REVIEW || document.status === OUTGOING_STATUS.DRAFT) && (
                       <button
                         onClick={() => onApprovalAction(document)}

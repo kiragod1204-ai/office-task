@@ -30,7 +30,9 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      localStorage.removeItem('loginTime')
+      // Don't redirect here, let the AuthContext handle it
+      // This prevents conflicts with React Router
     }
     return Promise.reject(error)
   }

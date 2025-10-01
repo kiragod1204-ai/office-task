@@ -27,24 +27,34 @@ const DocumentTypeSelect: React.FC<DocumentTypeSelectProps> = ({
     loadDocumentTypes();
   }, []);
 
+  // Debug: log the current state
+  useEffect(() => {
+    console.log('DocumentTypeSelect - documentTypes state:', documentTypes);
+    console.log('DocumentTypeSelect - loading state:', loading);
+    console.log('DocumentTypeSelect - current value:', value);
+  }, [documentTypes, loading, value]);
+
   const loadDocumentTypes = async () => {
     try {
       setLoading(true);
       const response = await documentTypeApi.getAll();
-      setDocumentTypes(response.data.data);
+      const data = response.data?.data || response.data || [];
+      setDocumentTypes(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('Error loading document types:', error);
+      setDocumentTypes([]);
     } finally {
       setLoading(false);
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedValue = parseInt(e.target.value);
-    if (!isNaN(selectedValue)) {
-      onChange(selectedValue);
-    } else if (allowEmpty) {
+    const value = e.target.value;
+    const numValue = parseInt(value);
+    
+    if (value === '' || isNaN(numValue)) {
       onChange(0);
+    } else {
+      onChange(numValue);
     }
   };
 
@@ -61,12 +71,13 @@ const DocumentTypeSelect: React.FC<DocumentTypeSelectProps> = ({
       value={value || ''}
       onChange={handleChange}
       required={required}
-      className={`${className} border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500`}
+      disabled={loading}
+      className={`w-full ${className} border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${loading ? 'bg-gray-100' : 'bg-white'}`}
     >
       <option value="">{allowEmpty ? emptyLabel : placeholder}</option>
-      {documentTypes.map((type) => (
-        <option key={type.id} value={type.id}>
-          {type.name}
+      {Array.isArray(documentTypes) && documentTypes.map((type, index) => (
+        <option key={type?.ID || `type-${index}`} value={type?.ID || ''}>
+          {type?.name || 'Unknown'}
         </option>
       ))}
     </select>

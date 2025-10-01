@@ -6,6 +6,8 @@ import (
 	"ai-code-agent-backend/services"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -78,11 +80,30 @@ func CreateTask(c *gin.Context) {
 
 	// Parse deadline if provided
 	if req.Deadline != "" {
-		deadline, err := time.Parse("2006-01-02T15:04:05Z", req.Deadline)
+		var deadline time.Time
+		var err error
+
+		// Try multiple date formats
+		formats := []string{
+			time.RFC3339,           // 2006-01-02T15:04:05Z07:00
+			"2006-01-02T15:04:05Z", // 2006-01-02T15:04:05Z
+			"2006-01-02T15:04:05",  // 2006-01-02T15:04:05 (datetime-local)
+			"2006-01-02 15:04:05",  // 2006-01-02 15:04:05
+			"2006-01-02",           // 2006-01-02 (date only)
+		}
+
+		for _, format := range formats {
+			deadline, err = time.Parse(format, req.Deadline)
+			if err == nil {
+				break
+			}
+		}
+
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Định dạng thời gian không hợp lệ"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Định dạng thời gian không hợp lệ. Vui lòng sử dụng định dạng: YYYY-MM-DDTHH:MM:SS"})
 			return
 		}
+
 		task.Deadline = &deadline
 	}
 
@@ -95,7 +116,7 @@ func CreateTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, "", models.StatusNotStarted, userID.(uint), "Tạo công việc mới")
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusCreated, task)
 }
@@ -108,7 +129,7 @@ func GetTasks(c *gin.Context) {
 	filterParams := services.ParseTaskFilterParams(c)
 
 	var tasks []models.Task
-	query := database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").Preload("Comments.User")
+	query := database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("Comments.User")
 
 	// Filter based on role
 	switch userRole.(string) {
@@ -173,7 +194,7 @@ func GetTask(c *gin.Context) {
 	}
 
 	var task models.Task
-	if err := database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").Preload("Comments.User").Preload("StatusHistory.ChangedBy").First(&task, id).Error; err != nil {
+	if err := database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("Comments.User").Preload("StatusHistory.ChangedBy").First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy công việc"})
 		return
 	}
@@ -232,7 +253,7 @@ func AssignTask(c *gin.Context) {
 	}
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -246,7 +267,7 @@ func GetTaskWorkflow(c *gin.Context) {
 	}
 
 	var task models.Task
-	if err := database.DB.Preload("AssignedUser").Preload("Creator").First(&task, id).Error; err != nil {
+	if err := database.DB.Preload("AssignedTo").Preload("CreatedBy").First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy công việc"})
 		return
 	}
@@ -421,7 +442,7 @@ func UpdateTaskStatus(c *gin.Context) {
 	createTaskStatusHistory(task.ID, oldStatus, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -479,11 +500,30 @@ func UpdateTask(c *gin.Context) {
 		updates["description"] = req.Description
 	}
 	if req.Deadline != "" {
-		deadline, err := time.Parse("2006-01-02T15:04:05Z", req.Deadline)
+		var deadline time.Time
+		var err error
+
+		// Try multiple date formats
+		formats := []string{
+			time.RFC3339,           // 2006-01-02T15:04:05Z07:00
+			"2006-01-02T15:04:05Z", // 2006-01-02T15:04:05Z
+			"2006-01-02T15:04:05",  // 2006-01-02T15:04:05 (datetime-local)
+			"2006-01-02 15:04:05",  // 2006-01-02 15:04:05
+			"2006-01-02",           // 2006-01-02 (date only)
+		}
+
+		for _, format := range formats {
+			deadline, err = time.Parse(format, req.Deadline)
+			if err == nil {
+				break
+			}
+		}
+
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Định dạng thời gian không hợp lệ"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Định dạng thời gian không hợp lệ. Vui lòng sử dụng định dạng: YYYY-MM-DDTHH:MM:SS"})
 			return
 		}
+
 		updates["deadline"] = deadline
 	}
 	if req.DeadlineType != "" {
@@ -514,7 +554,7 @@ func UpdateTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, task.Status, task.Status, userID.(uint), "Cập nhật thông tin công việc")
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -640,7 +680,7 @@ func ForwardTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, task.Status, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -723,7 +763,7 @@ func DelegateTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, task.Status, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -768,7 +808,7 @@ func UpdateProcessingContent(c *gin.Context) {
 	createTaskStatusHistory(task.ID, task.Status, task.Status, userID.(uint), "Cập nhật nội dung xử lý công việc")
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -787,4 +827,212 @@ func GetTaskStatusHistory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, history)
+}
+
+// DownloadTaskIncomingDocument downloads the incoming document file for a task
+func DownloadTaskIncomingDocument(c *gin.Context) {
+	taskID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Task ID không hợp lệ"})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	userRole, _ := c.Get("user_role")
+
+	// Get task with incoming document
+	var task models.Task
+	if err := database.DB.Preload("IncomingDocument").First(&task, taskID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy công việc"})
+		return
+	}
+
+	if task.IncomingDocument == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Công việc không có văn bản đến"})
+		return
+	}
+
+	// Check if user has access to this task
+	canAccess := false
+	switch userRole.(string) {
+	case models.RoleSecretary, models.RoleAdmin:
+		canAccess = true
+	case models.RoleTeamLeader, models.RoleDeputy:
+		canAccess = task.AssignedToID != nil && *task.AssignedToID == userID.(uint) || task.CreatedByID == userID.(uint)
+	case models.RoleOfficer:
+		canAccess = task.AssignedToID != nil && *task.AssignedToID == userID.(uint)
+	}
+
+	if !canAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Không có quyền truy cập văn bản này"})
+		return
+	}
+
+	// Check if file exists
+	if task.IncomingDocument.FilePath == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Văn bản không có file đính kèm"})
+		return
+	}
+
+	filePath := task.IncomingDocument.FilePath
+	osFilePath := filepath.FromSlash(filePath)
+
+	if _, err := os.Stat(osFilePath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File không tồn tại"})
+		return
+	}
+
+	// Generate download filename
+	filename := fmt.Sprintf("van-ban-den-%d-%s.pdf", task.IncomingDocument.ArrivalNumber,
+		strings.ReplaceAll(task.IncomingDocument.Summary, " ", "-"))
+
+	// Set headers for download
+	c.Header("Content-Description", "File Transfer")
+	c.Header("Content-Transfer-Encoding", "binary")
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Header("Content-Type", "application/pdf")
+
+	c.File(osFilePath)
+}
+
+// DownloadTaskOutgoingDocument downloads the outgoing document file for a task
+func DownloadTaskOutgoingDocument(c *gin.Context) {
+	taskID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Task ID không hợp lệ"})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	userRole, _ := c.Get("user_role")
+
+	// Get task and find related outgoing document
+	var task models.Task
+	if err := database.DB.First(&task, taskID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy công việc"})
+		return
+	}
+
+	// Find outgoing document related to this task (through task report or other relationship)
+	// For now, we'll look for outgoing documents created by the same user or around the same time
+	var outgoingDoc models.OutgoingDocument
+	if err := database.DB.Where("created_by_id = ? AND created_at >= ? AND created_at <= ?",
+		task.CreatedByID,
+		task.CreatedAt.Add(-24*time.Hour),
+		task.CreatedAt.Add(24*time.Hour)).First(&outgoingDoc).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy văn bản đi liên quan"})
+		return
+	}
+
+	// Check if user has access to this task
+	canAccess := false
+	switch userRole.(string) {
+	case models.RoleSecretary, models.RoleAdmin:
+		canAccess = true
+	case models.RoleTeamLeader, models.RoleDeputy:
+		canAccess = task.AssignedToID != nil && *task.AssignedToID == userID.(uint) || task.CreatedByID == userID.(uint)
+	case models.RoleOfficer:
+		canAccess = task.AssignedToID != nil && *task.AssignedToID == userID.(uint)
+	}
+
+	if !canAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Không có quyền truy cập văn bản này"})
+		return
+	}
+
+	// Check if file exists
+	if outgoingDoc.FilePath == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Văn bản không có file đính kèm"})
+		return
+	}
+
+	filePath := outgoingDoc.FilePath
+	osFilePath := filepath.FromSlash(filePath)
+
+	if _, err := os.Stat(osFilePath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File không tồn tại"})
+		return
+	}
+
+	// Generate download filename
+	filename := fmt.Sprintf("van-ban-di-%s-%s.pdf", outgoingDoc.DocumentNumber,
+		strings.ReplaceAll(outgoingDoc.Summary, " ", "-"))
+
+	// Set headers for download
+	c.Header("Content-Description", "File Transfer")
+	c.Header("Content-Transfer-Encoding", "binary")
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Header("Content-Type", "application/pdf")
+
+	c.File(osFilePath)
+}
+
+// GetTaskDocuments returns all documents (incoming and outgoing) related to a task
+func GetTaskDocuments(c *gin.Context) {
+	taskID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Task ID không hợp lệ"})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	userRole, _ := c.Get("user_role")
+
+	// Get task with incoming document
+	var task models.Task
+	if err := database.DB.Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").First(&task, taskID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy công việc"})
+		return
+	}
+
+	// Check if user has access to this task
+	canAccess := false
+	switch userRole.(string) {
+	case models.RoleSecretary, models.RoleAdmin:
+		canAccess = true
+	case models.RoleTeamLeader, models.RoleDeputy:
+		canAccess = task.AssignedToID != nil && *task.AssignedToID == userID.(uint) || task.CreatedByID == userID.(uint)
+	case models.RoleOfficer:
+		canAccess = task.AssignedToID != nil && *task.AssignedToID == userID.(uint)
+	}
+
+	if !canAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Không có quyền truy cập công việc này"})
+		return
+	}
+
+	// Find outgoing documents related to this task (through task report or other relationship)
+	var outgoingDocs []models.OutgoingDocument
+	database.DB.Preload("DocumentType").Preload("IssuingUnit").Where("created_by_id = ? AND created_at >= ? AND created_at <= ?",
+		task.CreatedByID,
+		task.CreatedAt.Add(-24*time.Hour),
+		task.CreatedAt.Add(24*time.Hour)).Find(&outgoingDocs)
+
+	// Prepare response
+	response := gin.H{
+		"task_id":            taskID,
+		"incoming_document":  nil,
+		"outgoing_documents": outgoingDocs,
+	}
+
+	if task.IncomingDocument != nil {
+		response["incoming_document"] = task.IncomingDocument
+	}
+
+	c.JSON(http.StatusOK, response)
 }

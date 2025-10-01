@@ -98,22 +98,36 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   // Fetch tasks for notifications
   useEffect(() => {
+    let isMounted = true
+    
     const fetchTasks = async () => {
       try {
         const data = await tasksApi.getTasks()
-        setTasks(data)
+        if (isMounted) {
+          setTasks(data)
+        }
       } catch (error) {
-        console.error('Error fetching tasks for notifications:', error)
+        if (isMounted) {
+          console.error('Error fetching tasks for notifications:', error)
+        }
       }
     }
 
     if (user) {
       fetchTasks()
       // Refresh tasks every 5 minutes for real-time notifications
-      const interval = setInterval(fetchTasks, 5 * 60 * 1000)
-      return () => clearInterval(interval)
+      const interval = setInterval(() => {
+        if (isMounted) {
+          fetchTasks()
+        }
+      }, 5 * 60 * 1000)
+      
+      return () => {
+        isMounted = false
+        clearInterval(interval)
+      }
     }
-  }, [user])
+  }, [user?.id]) // Use user.id instead of user object to prevent unnecessary re-renders
 
   const navigation = [
     {
@@ -136,7 +150,13 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     },
     {
       name: 'Văn bản đến',
-      href: '/incoming-files',
+      href: '/incoming-documents',
+      icon: FolderOpen,
+      roles: ['Quản trị viên', 'Trưởng Công An Xã', 'Phó Công An Xã', 'Văn thư']
+    },
+    {
+      name: 'Văn bản đi',
+      href: '/outgoing-documents',
       icon: FolderOpen,
       roles: ['Quản trị viên', 'Trưởng Công An Xã', 'Phó Công An Xã', 'Văn thư']
     },

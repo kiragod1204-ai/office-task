@@ -30,28 +30,31 @@ export const SessionTimeoutHandler: React.FC = () => {
         const timeRemaining = (24 * 60 * 60 * 1000) - timeDiff // 24 hours - elapsed time
         
         if (timeRemaining <= 300000 && timeRemaining > 0) { // 5 minutes or less
-          setShowWarning(true)
-          setCountdown(Math.floor(timeRemaining / 1000))
-        } else {
+          if (!showWarning) { // Only set if not already showing
+            setShowWarning(true)
+            setCountdown(Math.floor(timeRemaining / 1000))
+          }
+        } else if (timeRemaining > 300000) {
           setShowWarning(false)
         }
       }
     }
 
-    const interval = setInterval(checkWarning, 1000) // Check every second
+    checkWarning() // Initial check
+    const interval = setInterval(checkWarning, 5000) // Check every 5 seconds instead of 1 second
     return () => clearInterval(interval)
-  }, [user])
+  }, [user, showWarning]) // Add showWarning to dependencies
 
   useEffect(() => {
     if (showWarning && countdown > 0) {
       const timer = setTimeout(() => {
-        setCountdown(countdown - 1)
+        setCountdown(prev => prev - 1)
       }, 1000)
       return () => clearTimeout(timer)
-    } else if (countdown <= 0) {
+    } else if (showWarning && countdown <= 0) {
       logout()
     }
-  }, [showWarning, countdown, logout])
+  }, [showWarning, countdown]) // Remove logout from dependencies
 
   const handleRefreshSession = async () => {
     setRefreshing(true)

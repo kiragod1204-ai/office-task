@@ -24,8 +24,11 @@ type Task struct {
 
 	// Relations
 	AssignedTo       *User               `json:"assigned_to" gorm:"foreignkey:AssignedToID"`
+	AssignedUser     *User               `json:"assigned_user" gorm:"foreignkey:AssignedToID"` // Compatibility field
 	CreatedBy        User                `json:"created_by" gorm:"foreignkey:CreatedByID"`
+	Creator          User                `json:"creator" gorm:"foreignkey:CreatedByID"` // Compatibility field
 	IncomingDocument *IncomingDocument   `json:"incoming_document" gorm:"foreignkey:IncomingDocumentID"`
+	IncomingFile     *IncomingDocument   `json:"incoming_file" gorm:"foreignkey:IncomingDocumentID"` // Compatibility field
 	Comments         []Comment           `json:"comments" gorm:"foreignkey:TaskID"`
 	StatusHistory    []TaskStatusHistory `json:"status_history" gorm:"foreignkey:TaskID"`
 }

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -37,3 +38,17 @@ const (
 	IncomingStatusProcessing = "processing"
 	IncomingStatusCompleted  = "completed"
 )
+
+// MarshalJSON provides custom JSON marshaling to include compatibility fields
+func (doc *IncomingDocument) MarshalJSON() ([]byte, error) {
+	type Alias IncomingDocument
+	return json.Marshal(&struct {
+		*Alias
+		OrderNumber int    `json:"order_number"` // Compatibility field for arrival_number
+		FileName    string `json:"file_name"`    // Compatibility field for file path
+	}{
+		Alias:       (*Alias)(doc),
+		OrderNumber: doc.ArrivalNumber,
+		FileName:    doc.Summary, // Use summary as file name for now
+	})
+}
