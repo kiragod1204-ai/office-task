@@ -36,7 +36,7 @@ const DocumentTypeManagement: React.FC = () => {
     e.preventDefault();
     try {
       if (editingType) {
-        await documentTypeApi.update(editingType.id, formData);
+        await documentTypeApi.update(editingType.ID, formData);
       } else {
         await documentTypeApi.create(formData);
       }
@@ -179,7 +179,7 @@ const DocumentTypeManagement: React.FC = () => {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {documentTypes.map((type) => (
-              <tr key={type.id}>
+              <tr key={type.ID}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {type.name}
                 </td>
@@ -205,13 +205,13 @@ const DocumentTypeManagement: React.FC = () => {
                     Sửa
                   </button>
                   <button
-                    onClick={() => handleToggleStatus(type.id)}
+                    onClick={() => handleToggleStatus(type.ID)}
                     className="text-yellow-600 hover:text-yellow-900"
                   >
                     {type.is_active ? 'Vô hiệu hóa' : 'Kích hoạt'}
                   </button>
                   <button
-                    onClick={() => handleDelete(type.id)}
+                    onClick={() => handleDelete(type.ID)}
                     className="text-red-600 hover:text-red-900"
                   >
                     Xóa

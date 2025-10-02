@@ -36,7 +36,7 @@ const IssuingUnitManagement: React.FC = () => {
     e.preventDefault();
     try {
       if (editingUnit) {
-        await issuingUnitApi.update(editingUnit.id, formData);
+        await issuingUnitApi.update(editingUnit.ID, formData);
       } else {
         await issuingUnitApi.create(formData);
       }
@@ -179,7 +179,7 @@ const IssuingUnitManagement: React.FC = () => {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {issuingUnits.map((unit) => (
-              <tr key={unit.id}>
+              <tr key={unit.ID}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {unit.name}
                 </td>
@@ -205,13 +205,13 @@ const IssuingUnitManagement: React.FC = () => {
                     Sửa
                   </button>
                   <button
-                    onClick={() => handleToggleStatus(unit.id)}
+                    onClick={() => handleToggleStatus(unit.ID)}
                     className="text-yellow-600 hover:text-yellow-900"
                   >
                     {unit.is_active ? 'Vô hiệu hóa' : 'Kích hoạt'}
                   </button>
                   <button
-                    onClick={() => handleDelete(unit.id)}
+                    onClick={() => handleDelete(unit.ID)}
                     className="text-red-600 hover:text-red-900"
                   >
                     Xóa

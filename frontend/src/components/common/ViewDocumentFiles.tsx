@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { getFilesByDocument, formatFileSize, getFileTypeIcon, deleteFile } from '../../api/files';
-import { Download, FileText, Loader2, Edit, Trash2, Upload } from 'lucide-react';
+import { Download, FileText, Loader2, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 

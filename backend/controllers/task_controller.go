@@ -196,6 +196,199 @@ func GetTasks(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// ChooseReviewer allows officers to choose a specific reviewer (Team Leader or Deputy) for their task
+func ChooseReviewer(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID không hợp lệ"})
+		return
+	}
+
+	var req ChooseReviewerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	userRole, _ := c.Get("user_role")
+
+	var task models.Task
+	if err := database.DB.First(&task, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy công việc"})
+		return
+	}
+
+	// Check if user is an officer
+	if userRole.(string) != models.RoleOfficer {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Chỉ Cán bộ mới có thể chọn người xem xét"})
+		return
+	}
+
+	// Check if the task is assigned to this officer
+	if task.AssignedToID == nil || *task.AssignedToID != userID.(uint) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Chỉ có thể chọn người xem xét cho công việc được giao cho mình"})
+		return
+	}
+
+	// Check if task is in processing status
+	if task.Status != models.StatusProcessing {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Chỉ có thể chọn người xem xét cho công việc đang trong trạng thái xử lý"})
+		return
+	}
+
+	// Verify the reviewer exists and has appropriate role
+	var reviewer models.User
+	if err := database.DB.First(&reviewer, req.ReviewerID).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Người xem xét không tồn tại"})
+		return
+	}
+
+	// Check if reviewer is Team Leader or Deputy
+	if reviewer.Role != models.RoleTeamLeader && reviewer.Role != models.RoleDeputy {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Người xem xét phải là Trưởng Công An Xã hoặc Phó Công An Xã"})
+		return
+	}
+
+	// Check if reviewer is active
+	if !reviewer.IsActive {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Người xem xét không còn hoạt động"})
+		return
+	}
+
+	oldStatus := task.Status
+	task.Status = models.StatusReview
+	task.AssignedToID = &reviewer.ID
+
+	if err := database.DB.Save(&task).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể cập nhật trạng thái công việc"})
+		return
+	}
+
+	// Create status history
+	notes := fmt.Sprintf("Cán bộ đã chọn %s để xem xét công việc", reviewer.Name)
+	if req.Notes != "" {
+		notes += ". Ghi chú: " + req.Notes
+	}
+
+	var officer models.User
+	database.DB.First(&officer, userID.(uint))
+	notes = fmt.Sprintf("Cán bộ %s đã chọn %s để xem xét công việc", officer.Name, reviewer.Name)
+	if req.Notes != "" {
+		notes += ". Ghi chú: " + req.Notes
+	}
+
+	createTaskStatusHistory(task.ID, oldStatus, task.Status, userID.(uint), notes)
+
+	// Load relations
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"task":     task,
+		"reviewer": reviewer,
+		"message":  fmt.Sprintf("Đã chọn %s để xem xét công việc", reviewer.Name),
+	})
+}
+
+// ReworkTask allows officers to send a task back to processing status for rework
+func ReworkTask(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID không hợp lệ"})
+		return
+	}
+
+	var req ReworkTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	userRole, _ := c.Get("user_role")
+
+	var task models.Task
+	if err := database.DB.First(&task, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy công việc"})
+		return
+	}
+
+	// Check if user is an officer
+	if userRole.(string) != models.RoleOfficer {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Chỉ Cán bộ mới có thể yêu cầu làm lại công việc"})
+		return
+	}
+
+	// Check if the task is assigned to this officer
+	if task.AssignedToID == nil || *task.AssignedToID != userID.(uint) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Chỉ có thể yêu cầu làm lại công việc được giao cho mình"})
+		return
+	}
+
+	// Check if task is in review status
+	if task.Status != models.StatusReview {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Chỉ có thể yêu cầu làm lại công việc đang trong trạng thái xem xét"})
+		return
+	}
+
+	oldStatus := task.Status
+	task.Status = models.StatusProcessing
+
+	// Keep the task assigned to the officer for rework
+	officerID := userID.(uint)
+	task.AssignedToID = &officerID
+
+	if err := database.DB.Save(&task).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể cập nhật trạng thái công việc"})
+		return
+	}
+
+	// Create status history
+	notes := "Cán bộ đã yêu cầu làm lại công việc"
+	if req.Notes != "" {
+		notes += ". Lý do: " + req.Notes
+	}
+
+	var officer models.User
+	database.DB.First(&officer, userID.(uint))
+	notes = fmt.Sprintf("Cán bộ %s đã yêu cầu làm lại công việc", officer.Name)
+	if req.Notes != "" {
+		notes += ". Lý do: " + req.Notes
+	}
+
+	createTaskStatusHistory(task.ID, oldStatus, task.Status, userID.(uint), notes)
+
+	// Load relations
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"task":    task,
+		"message": "Công việc đã được gửi lại để xử lý lại",
+	})
+}
+
+// GetAvailableReviewers returns available Team Leaders and Deputies for review
+func GetAvailableReviewers(c *gin.Context) {
+	userRole, _ := c.Get("user_role")
+
+	// Check if user is an officer
+	if userRole != models.RoleOfficer {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Chỉ Cán bộ mới có thể xem danh sách người xem xét"})
+		return
+	}
+
+	var reviewers []models.User
+	if err := database.DB.Where("role IN (?) AND is_active = ?", []string{models.RoleTeamLeader, models.RoleDeputy}, true).Find(&reviewers).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể lấy danh sách người xem xét"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"reviewers": reviewers,
+		"message":   fmt.Sprintf("Tìm thấy %d người xem xét khả dụng", len(reviewers)),
+	})
+}
+
 // SubmitForReview allows officers to submit their completed work for review by Team Leader/Deputy
 func SubmitForReview(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
@@ -276,7 +469,7 @@ func SubmitForReview(c *gin.Context) {
 	}
 
 	// Create status history
-	notes := fmt.Sprintf("Cán bộ %s đã nộp công việc để %s xem xét", 
+	notes := fmt.Sprintf("Cán bộ %s đã nộp công việc để %s xem xét",
 		func() string {
 			var officer models.User
 			if err := database.DB.First(&officer, userID.(uint)).Error; err == nil {
@@ -406,7 +599,7 @@ func GetTaskWorkflow(c *gin.Context) {
 			"completed":   true,
 			"current":     task.Status == models.StatusReceived,
 			"timestamp":   task.CreatedAt,
-			"user":        func() string {
+			"user": func() string {
 				if task.CreatedBy != nil {
 					return task.CreatedBy.Name
 				}
@@ -756,6 +949,15 @@ type DelegateTaskRequest struct {
 type UpdateProcessingContentRequest struct {
 	ProcessingContent string `json:"processing_content"`
 	ProcessingNotes   string `json:"processing_notes"`
+}
+
+type ChooseReviewerRequest struct {
+	ReviewerID uint   `json:"reviewer_id" binding:"required"`
+	Notes      string `json:"notes"`
+}
+
+type ReworkTaskRequest struct {
+	Notes string `json:"notes"`
 }
 
 func ForwardTask(c *gin.Context) {

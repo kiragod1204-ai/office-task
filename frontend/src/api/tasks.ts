@@ -152,6 +152,15 @@ export interface UpdateProcessingContentRequest {
   processing_notes: string
 }
 
+export interface ChooseReviewerRequest {
+  reviewer_id: number
+  notes?: string
+}
+
+export interface ReworkTaskRequest {
+  notes?: string
+}
+
 export const tasksApi = {
   getTasks: async (): Promise<Task[]> => {
     const response = await apiClient.get('/tasks')
@@ -232,6 +241,21 @@ export const tasksApi = {
 
   submitForReview: async (id: number): Promise<{ task: Task; reviewer: any; message: string }> => {
     const response = await apiClient.post(`/tasks/${id}/submit-review`)
+    return response.data
+  },
+
+  chooseReviewer: async (id: number, data: ChooseReviewerRequest): Promise<{ task: Task; reviewer: any; message: string }> => {
+    const response = await apiClient.post(`/tasks/${id}/choose-reviewer`, data)
+    return response.data
+  },
+
+  reworkTask: async (id: number, data: ReworkTaskRequest): Promise<{ task: Task; message: string }> => {
+    const response = await apiClient.post(`/tasks/${id}/rework`, data)
+    return response.data
+  },
+
+  getAvailableReviewers: async (): Promise<{ reviewers: any[]; message: string }> => {
+    const response = await apiClient.get('/tasks/reviewers/available')
     return response.data
   }
 }

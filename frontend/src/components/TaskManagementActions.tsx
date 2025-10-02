@@ -7,12 +7,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import { tasksApi, Task, UpdateTaskRequest, ForwardTaskRequest } from '@/api/tasks'
+import { tasksApi, Task, UpdateTaskRequest, ForwardTaskRequest, ChooseReviewerRequest, ReworkTaskRequest } from '@/api/tasks'
 import { usersApi, User as UserType } from '@/api/users'
 import { filesApi } from '@/api/files'
 import { Edit, Trash2, Forward, AlertTriangle, Search, X, User, Settings, Send } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { ComprehensiveTaskInterface } from './tasks/ComprehensiveTaskInterface'
 
 interface TaskManagementActionsProps {
   task: Task
@@ -32,6 +31,8 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false)
+  const [chooseReviewerDialogOpen, setChooseReviewerDialogOpen] = useState(false)
+  const [reworkDialogOpen, setReworkDialogOpen] = useState(false)
   
   const [editForm, setEditForm] = useState({
     description: task?.description || '',
@@ -45,12 +46,24 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
     comment: ''
   })
   
+  const [chooseReviewerForm, setChooseReviewerForm] = useState({
+    reviewer_id: 0,
+    notes: ''
+  })
+  
+  const [reworkForm, setReworkForm] = useState({
+    notes: ''
+  })
+  
   const [users, setUsers] = useState<UserType[]>([])
   const [incomingFiles, setIncomingFiles] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingUsers, setLoadingUsers] = useState(false)
+  const [loadingReviewers, setLoadingReviewers] = useState(false)
+  const [availableReviewers, setAvailableReviewers] = useState<UserType[]>([])
   const [userSearchTerm, setUserSearchTerm] = useState('')
   const [forwardUserSearchTerm, setForwardUserSearchTerm] = useState('')
+  const [reviewerSearchTerm, setReviewerSearchTerm] = useState('')
 
   useEffect(() => {
     if (editDialogOpen || forwardDialogOpen) {
@@ -59,7 +72,10 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
     if (editDialogOpen) {
       fetchIncomingFiles()
     }
-  }, [editDialogOpen, forwardDialogOpen])
+    if (chooseReviewerDialogOpen) {
+      fetchAvailableReviewers()
+    }
+  }, [editDialogOpen, forwardDialogOpen, chooseReviewerDialogOpen])
 
   const fetchUsers = async () => {
     setLoadingUsers(true)
@@ -103,6 +119,29 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
     }
   }
 
+  const fetchAvailableReviewers = async () => {
+    setLoadingReviewers(true)
+    try {
+      const result = await tasksApi.getAvailableReviewers()
+      // Normalize reviewer data to ensure consistent field names
+      const normalizedReviewers = result.reviewers.map((reviewer: any) => ({
+        ...reviewer,
+        id: reviewer.id || reviewer.ID || 0,
+        ID: reviewer.ID || reviewer.id || 0
+      })).filter((reviewer: any) => reviewer.id > 0)
+      setAvailableReviewers(normalizedReviewers)
+    } catch (error) {
+      console.error('Error fetching available reviewers:', error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi tải dữ liệu",
+        description: "Không thể tải danh sách người xem xét. Vui lòng thử lại.",
+      })
+    } finally {
+      setLoadingReviewers(false)
+    }
+  }
+
   const canEdit = () => {
     if (!user) return false
     if (user.role === 'Văn thư') return true
@@ -131,6 +170,22 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
     if (user.role !== 'Cán bộ') return false
     if (task.assigned_to_id !== user.id) return false
     if (task.status !== 'Đang xử lí') return false
+    return true
+  }
+
+  const canChooseReviewer = () => {
+    if (!user) return false
+    if (user.role !== 'Cán bộ') return false
+    if (task.assigned_to_id !== user.id) return false
+    if (task.status !== 'Đang xử lí') return false
+    return true
+  }
+
+  const canReworkTask = () => {
+    if (!user) return false
+    if (user.role !== 'Cán bộ') return false
+    if (task.assigned_to_id !== user.id) return false
+    if (task.status !== 'Xem xét') return false
     return true
   }
 
@@ -285,15 +340,100 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
     }
   }
 
-  if (!canEdit() && !canDelete() && !canForward() && !canSubmitForReview()) {
+  const handleChooseReviewer = async () => {
+    if (!chooseReviewerForm.reviewer_id) {
+      toast({
+        variant: "destructive",
+        title: "Lỗi",
+        description: "Vui lòng chọn người xem xét",
+      })
+      return
+    }
+
+    const selectedReviewer = availableReviewers.find(u => (u.id || u.ID) === chooseReviewerForm.reviewer_id)
+    if (!selectedReviewer) {
+      toast({
+        variant: "destructive",
+        title: "Lỗi",
+        description: "Không tìm thấy thông tin người xem xét",
+      })
+      return
+    }
+
+    setLoading(true)
+    try {
+      const chooseReviewerData: ChooseReviewerRequest = {
+        reviewer_id: chooseReviewerForm.reviewer_id,
+        notes: chooseReviewerForm.notes.trim()
+      }
+
+      const result = await tasksApi.chooseReviewer(task.ID, chooseReviewerData)
+      
+      onTaskUpdate(result.task)
+      setChooseReviewerDialogOpen(false)
+      setChooseReviewerForm({ reviewer_id: 0, notes: '' })
+      setReviewerSearchTerm('')
+      
+      toast({
+        title: "Chọn người xem xét thành công",
+        description: result.message,
+      })
+    } catch (error: any) {
+      console.error('Error choosing reviewer:', error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi chọn người xem xét",
+        description: error.response?.data?.error || "Không thể chọn người xem xét",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleReworkTask = async () => {
+    setLoading(true)
+    try {
+      const reworkData: ReworkTaskRequest = {
+        notes: reworkForm.notes.trim()
+      }
+
+      const result = await tasksApi.reworkTask(task.ID, reworkData)
+      
+      onTaskUpdate(result.task)
+      setReworkDialogOpen(false)
+      setReworkForm({ notes: '' })
+      
+      toast({
+        title: "Yêu cầu làm lại thành công",
+        description: result.message,
+      })
+    } catch (error: any) {
+      console.error('Error reworking task:', error)
+      toast({
+        variant: "destructive",
+        title: "Lỗi yêu cầu làm lại",
+        description: error.response?.data?.error || "Không thể yêu cầu làm lại công việc",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filterReviewers = (searchTerm: string) => {
+    if (!searchTerm.trim()) return availableReviewers
+    return availableReviewers.filter(reviewer => 
+      reviewer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reviewer?.role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reviewer?.username?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  }
+
+  if (!canEdit() && !canDelete() && !canForward() && !canSubmitForReview() && !canChooseReviewer() && !canReworkTask()) {
     return null
   }
 
   return (
     <div className="space-y-4">
-      {/* Comprehensive Task Interface */}
-      <ComprehensiveTaskInterface task={task} onTaskUpdate={onTaskUpdate} />
-      
       <div className="space-y-2">
         <h4 className="font-medium text-sm flex items-center">
           <Settings className="w-4 h-4 mr-2" />
@@ -655,6 +795,300 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
           </DialogContent>
         </Dialog>
         )}
+
+      {canChooseReviewer() && (
+        <Dialog open={chooseReviewerDialogOpen} onOpenChange={setChooseReviewerDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="w-full justify-start">
+              <User className="w-4 h-4 mr-2" />
+              Chọn người xem xét
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <User className="w-5 h-5 mr-2 text-blue-600" />
+                Chọn người xem xét công việc
+              </DialogTitle>
+              <p className="text-sm text-gray-600 mt-2">
+                Chọn Trưởng Công An Xã hoặc Phó Công An Xã để xem xét công việc của bạn
+              </p>
+            </DialogHeader>
+            
+            <div className="space-y-6">
+              {/* Search and Reviewer Selection */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Người xem xét</Label>
+                <div className="mt-2 space-y-3">
+                  {/* Search Bar */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      placeholder="Tìm kiếm theo tên, vai trò hoặc tên đăng nhập..."
+                      value={reviewerSearchTerm}
+                      onChange={(e) => setReviewerSearchTerm(e.target.value)}
+                      className="pl-10 pr-10"
+                    />
+                    {reviewerSearchTerm && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                        onClick={() => setReviewerSearchTerm('')}
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Reviewer Cards */}
+                  <div className="space-y-2 max-h-60 overflow-y-auto border rounded-lg">
+                    {loadingReviewers ? (
+                      <div className="p-4 text-center">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                        <p className="text-sm text-gray-500 mt-2">Đang tải danh sách người xem xét...</p>
+                      </div>
+                    ) : availableReviewers.length === 0 ? (
+                      <div className="p-4 text-center text-gray-500">
+                        <User className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                        <p className="text-sm">Không có người xem xét khả dụng</p>
+                      </div>
+                    ) : (
+                      <>
+                        {filterReviewers(reviewerSearchTerm)
+                          .filter(reviewer => reviewer?.id && reviewer.id > 0)
+                          .map((reviewer) => {
+                            const reviewerId = reviewer.id
+                            const isSelected = chooseReviewerForm.reviewer_id === reviewerId
+                            
+                            return (
+                              <button
+                                key={reviewerId}
+                                onClick={() => setChooseReviewerForm({ ...chooseReviewerForm, reviewer_id: reviewerId || 0 })}
+                                className={`w-full text-left p-3 border-b last:border-b-0 hover:bg-gray-50 transition-colors ${
+                                  isSelected ? 'bg-blue-50 border-blue-200' : 'cursor-pointer'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-3">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                      isSelected ? 'bg-blue-100' : 'bg-gray-100'
+                                    }`}>
+                                      <User className={`w-4 h-4 ${
+                                        isSelected ? 'text-blue-600' : 'text-gray-500'
+                                      }`} />
+                                    </div>
+                                    <div>
+                                      <p className="font-medium text-sm">{reviewer.name}</p>
+                                      <p className="text-xs text-gray-500">{reviewer.role} • @{reviewer.username}</p>
+                                    </div>
+                                  </div>
+                                  {isSelected && (
+                                    <div className="w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center">
+                                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                                    </div>
+                                  )}
+                                </div>
+                              </button>
+                            )
+                          })}
+                        
+                        {filterReviewers(reviewerSearchTerm).length === 0 && (
+                          <div className="p-4 text-center text-gray-500">
+                            <User className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                            <p className="text-sm">
+                              {reviewerSearchTerm ? 'Không tìm thấy người xem xét phù hợp' : 'Không có người xem xét khả dụng'}
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Notes Section */}
+              <div>
+                <Label htmlFor="reviewer_notes" className="text-sm font-medium text-gray-700">
+                  Ghi chú
+                </Label>
+                <p className="text-xs text-gray-500 mt-1 mb-2">
+                  Thêm ghi chú cho người xem xét (tùy chọn)
+                </p>
+                <Textarea
+                  id="reviewer_notes"
+                  value={chooseReviewerForm.notes}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value.length <= 500) {
+                      setChooseReviewerForm({ ...chooseReviewerForm, notes: value })
+                    }
+                  }}
+                  placeholder="Ví dụ: Đã hoàn thành theo yêu cầu, cần xem xét kỹ các chi tiết..."
+                  rows={4}
+                  className="resize-none"
+                />
+                <div className="flex justify-between items-center mt-1">
+                  <span className={`text-xs ${
+                    chooseReviewerForm.notes.length > 450 ? 'text-orange-500' : 
+                    chooseReviewerForm.notes.length > 400 ? 'text-yellow-500' : 'text-gray-400'
+                  }`}>
+                    {chooseReviewerForm.notes.length}/500 ký tự
+                  </span>
+                </div>
+              </div>
+
+              {/* Selected Reviewer Summary */}
+              {chooseReviewerForm.reviewer_id > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-medium text-sm text-blue-800 mb-2">Xác nhận chọn người xem xét</h4>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <User className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-blue-800">
+                        Người xem xét: <span className="font-medium">
+                          {availableReviewers.find(u => (u.id || u.ID) === chooseReviewerForm.reviewer_id)?.name}
+                        </span>
+                      </p>
+                      <p className="text-xs text-blue-600">
+                        {availableReviewers.find(u => (u.id || u.ID) === chooseReviewerForm.reviewer_id)?.role}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setChooseReviewerDialogOpen(false)
+                    setReviewerSearchTerm('')
+                    setChooseReviewerForm({ reviewer_id: 0, notes: '' })
+                  }}
+                  disabled={loading}
+                >
+                  Hủy
+                </Button>
+                <Button 
+                  onClick={handleChooseReviewer} 
+                  disabled={loading || !chooseReviewerForm.reviewer_id}
+                  className="min-w-[120px]"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Đang chọn...
+                    </>
+                  ) : (
+                    <>
+                      <User className="w-4 h-4 mr-2" />
+                      Chọn người xem xét
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {canReworkTask() && (
+        <Dialog open={reworkDialogOpen} onOpenChange={setReworkDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="w-full justify-start">
+              <AlertTriangle className="w-4 h-4 mr-2" />
+              Yêu cầu làm lại
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center text-orange-600">
+                <AlertTriangle className="w-5 h-5 mr-2" />
+                Yêu cầu làm lại công việc
+              </DialogTitle>
+              <p className="text-sm text-gray-600 mt-2">
+                Gửi công việc trở lại trạng thái xử lý để thực hiện lại
+              </p>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {/* Notes Section */}
+              <div>
+                <Label htmlFor="rework_notes" className="text-sm font-medium text-gray-700">
+                  Lý do yêu cầu làm lại
+                </Label>
+                <p className="text-xs text-gray-500 mt-1 mb-2">
+                  Vui lòng nêu rõ lý do cần làm lại công việc
+                </p>
+                <Textarea
+                  id="rework_notes"
+                  value={reworkForm.notes}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value.length <= 500) {
+                      setReworkForm({ ...reworkForm, notes: value })
+                    }
+                  }}
+                  placeholder="Ví dụ: Cần bổ sung thêm thông tin, có sai sót cần sửa chữa, cần thực hiện lại theo yêu cầu mới..."
+                  rows={4}
+                  className="resize-none"
+                />
+                <div className="flex justify-between items-center mt-1">
+                  <span className={`text-xs ${
+                    reworkForm.notes.length > 450 ? 'text-orange-500' : 
+                    reworkForm.notes.length > 400 ? 'text-yellow-500' : 'text-gray-400'
+                  }`}>
+                    {reworkForm.notes.length}/500 ký tự
+                  </span>
+                </div>
+              </div>
+
+              {/* Warning Message */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-sm text-yellow-800">
+                  <strong>Lưu ý:</strong> Công việc sẽ được chuyển về trạng thái "Đang xử lý" và bạn sẽ tiếp tục là người thực hiện.
+                </p>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setReworkDialogOpen(false)
+                    setReworkForm({ notes: '' })
+                  }}
+                  disabled={loading}
+                >
+                  Hủy
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={handleReworkTask} 
+                  disabled={loading}
+                  className="min-w-[120px]"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Đang xử lý...
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-4 h-4 mr-2" />
+                      Yêu cầu làm lại
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {canSubmitForReview() && (
         <Button 

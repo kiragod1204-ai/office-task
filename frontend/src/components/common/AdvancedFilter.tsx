@@ -195,7 +195,7 @@ const AdvancedFilter: React.FC<AdvancedFilterProps> = ({
           >
             <option value="">Tất cả loại văn bản</option>
             {documentTypes.map((type) => (
-              <option key={type.id} value={type.id}>
+              <option key={type.ID} value={type.ID}>
                 {type.name}
               </option>
             ))}
@@ -213,7 +213,7 @@ const AdvancedFilter: React.FC<AdvancedFilterProps> = ({
           >
             <option value="">Tất cả đơn vị</option>
             {issuingUnits.map((unit) => (
-              <option key={unit.id} value={unit.id}>
+              <option key={unit.ID} value={unit.ID}>
                 {unit.name}
               </option>
             ))}
