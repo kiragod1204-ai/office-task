@@ -183,11 +183,8 @@ func GetIncomingDocuments(c *gin.Context) {
 
 	// Apply role-based filtering
 	switch userRole.(string) {
-	case models.RoleSecretary, models.RoleAdmin:
+	case models.RoleSecretary, models.RoleAdmin, models.RoleTeamLeader, models.RoleDeputy:
 		// Can see all documents
-	case models.RoleTeamLeader, models.RoleDeputy:
-		// Can see documents assigned to them or created by them
-		query = query.Where("processor_id = ? OR created_by_id = ?", userID, userID)
 	case models.RoleOfficer:
 		// Can see documents where they have related tasks
 		query = query.Joins("JOIN tasks ON tasks.incoming_document_id = incoming_documents.id").
@@ -268,7 +265,6 @@ func UpdateIncomingDocument(c *gin.Context) {
 		return
 	}
 
-	userID, _ := c.Get("user_id")
 	userRole, _ := c.Get("user_role")
 
 	var document models.IncomingDocument
@@ -279,16 +275,8 @@ func UpdateIncomingDocument(c *gin.Context) {
 
 	// Check permissions
 	switch userRole.(string) {
-	case models.RoleSecretary, models.RoleAdmin:
+	case models.RoleSecretary, models.RoleAdmin, models.RoleTeamLeader, models.RoleDeputy:
 		// Can update any document
-	case models.RoleTeamLeader, models.RoleDeputy:
-		// Can update documents assigned to them or created by them
-		if document.ProcessorID == nil || *document.ProcessorID != userID.(uint) {
-			if document.CreatedByID != userID.(uint) {
-				c.JSON(http.StatusForbidden, gin.H{"error": "Không có quyền chỉnh sửa văn bản này"})
-				return
-			}
-		}
 	default:
 		c.JSON(http.StatusForbidden, gin.H{"error": "Không có quyền chỉnh sửa văn bản"})
 		return
@@ -417,7 +405,6 @@ func DeleteIncomingDocument(c *gin.Context) {
 		return
 	}
 
-	userID, _ := c.Get("user_id")
 	userRole, _ := c.Get("user_role")
 
 	var document models.IncomingDocument
@@ -428,14 +415,8 @@ func DeleteIncomingDocument(c *gin.Context) {
 
 	// Check permissions
 	switch userRole.(string) {
-	case models.RoleSecretary, models.RoleAdmin:
+	case models.RoleSecretary, models.RoleAdmin, models.RoleTeamLeader, models.RoleDeputy:
 		// Can delete any document
-	case models.RoleTeamLeader:
-		// Can delete documents created by them
-		if document.CreatedByID != userID.(uint) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Không có quyền xóa văn bản này"})
-			return
-		}
 	default:
 		c.JSON(http.StatusForbidden, gin.H{"error": "Không có quyền xóa văn bản"})
 		return

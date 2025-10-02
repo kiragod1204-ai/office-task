@@ -105,26 +105,48 @@ export const ViewTaskDocuments: React.FC<ViewTaskDocumentsProps> = ({
     }
   }
 
-  const handleDownloadOutgoing = async () => {
-    setDownloadingFile('outgoing')
+  const handleDownloadOutgoing = async (docId?: number) => {
+    const downloadKey = docId ? `outgoing-${docId}` : 'outgoing'
+    setDownloadingFile(downloadKey)
     try {
-      const response = await apiClient.get(`/tasks/${taskId}/download/outgoing`, {
-        responseType: 'blob'
-      })
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `van-ban-di-${taskId}.pdf`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      
-      toast({
-        title: "Tải xuống thành công",
-        description: "Văn bản đi đã được tải xuống",
-      })
+      // For outgoing documents, we need to use the files API with the specific file path
+      // First, get the document details to find the file path
+      if (docId) {
+        const docResponse = await apiClient.get(`/outgoing-documents/${docId}`)
+        const outgoingDoc = docResponse.data
+        
+        if (outgoingDoc.file_path) {
+          // Use the files download API - let the backend handle the filename
+          const { downloadFile } = await import('../../api/files')
+          await downloadFile(outgoingDoc.file_path, '') // Empty filename lets backend use original name
+          
+          toast({
+            title: "Tải xuống thành công",
+            description: "Văn bản đi đã được tải xuống",
+          })
+        } else {
+          throw new Error("Văn bản không có file đính kèm")
+        }
+      } else {
+        // Fallback to the task endpoint if no specific document ID
+        const response = await apiClient.get(`/tasks/${taskId}/download/outgoing`, {
+          responseType: 'blob'
+        })
+        
+        const url = window.URL.createObjectURL(new Blob([response.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', `van-ban-di-${taskId}.pdf`)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        
+        toast({
+          title: "Tải xuống thành công",
+          description: "Văn bản đi đã được tải xuống",
+        })
+      }
     } catch (error) {
       console.error('Download failed:', error)
       toast({
@@ -214,18 +236,16 @@ export const ViewTaskDocuments: React.FC<ViewTaskDocumentsProps> = ({
                 </div>
               </div>
               
-              {documents.incoming_document.file_path && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownloadIncoming}
-                  disabled={downloadingFile === 'incoming'}
-                  className="ml-4"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  {downloadingFile === 'incoming' ? 'Đang tải...' : 'Tải xuống'}
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadIncoming}
+                disabled={downloadingFile === 'incoming'}
+                className="ml-4"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {downloadingFile === 'incoming' ? 'Đang tải...' : 'Tải xuống'}
+              </Button>
             </div>
           </div>
         ) : (
@@ -292,18 +312,16 @@ export const ViewTaskDocuments: React.FC<ViewTaskDocumentsProps> = ({
                     </div>
                   </div>
                   
-                  {doc.file_path && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleDownloadOutgoing}
-                      disabled={downloadingFile === 'outgoing'}
-                      className="ml-4"
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      {downloadingFile === 'outgoing' ? 'Đang tải...' : 'Tải xuống'}
-                    </Button>
-                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDownloadOutgoing(doc.ID)}
+                    disabled={downloadingFile === `outgoing-${doc.ID}`}
+                    className="ml-4"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    {downloadingFile === `outgoing-${doc.ID}` ? 'Đang tải...' : 'Tải xuống'}
+                  </Button>
                 </div>
               </div>
             ))}

@@ -66,6 +66,7 @@ func main() {
 		api.DELETE("/tasks/:id", middleware.RequireRole(models.RoleSecretary, models.RoleTeamLeader), controllers.DeleteTask)
 		api.POST("/tasks/:id/forward", middleware.RequireRole(models.RoleTeamLeader, models.RoleDeputy), controllers.ForwardTask)
 		api.POST("/tasks/:id/delegate", middleware.RequireRole(models.RoleTeamLeader, models.RoleDeputy), controllers.DelegateTask)
+		api.POST("/tasks/:id/submit-review", controllers.SubmitForReview)
 		api.PUT("/tasks/:id/processing", controllers.UpdateProcessingContent)
 		api.GET("/tasks/:id/history", controllers.GetTaskStatusHistory)
 		api.POST("/tasks/:id/comments", controllers.CreateComment)
@@ -73,6 +74,11 @@ func main() {
 		api.GET("/tasks/:id/documents", controllers.GetTaskDocuments)
 		api.GET("/tasks/:id/download/incoming", controllers.DownloadTaskIncomingDocument)
 		api.GET("/tasks/:id/download/outgoing", controllers.DownloadTaskOutgoingDocument)
+
+		// Task Outgoing Document Relationship routes
+		api.POST("/tasks/:id/outgoing-documents", controllers.LinkTaskToOutgoingDocument)
+		api.DELETE("/tasks/:id/outgoing-documents/:outgoingDocId", controllers.UnlinkTaskFromOutgoingDocument)
+		api.GET("/tasks/:id/outgoing-documents", controllers.GetTaskOutgoingDocumentRelationships)
 
 		// Enhanced File routes
 		api.POST("/files/upload", controllers.EnhancedUploadFile)

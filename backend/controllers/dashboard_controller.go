@@ -88,10 +88,10 @@ func GetDashboardStats(c *gin.Context) {
 		// Can see all tasks
 	case models.RoleTeamLeader, models.RoleDeputy:
 		// Can see tasks assigned to them or created by them
-		query = query.Where("assigned_to = ? OR created_by = ?", userID, userID)
+		query = query.Where("assigned_to_id = ? OR created_by_id = ?", userID, userID)
 	case models.RoleOfficer:
 		// Can only see tasks assigned to them
-		query = query.Where("assigned_to = ?", userID)
+		query = query.Where("assigned_to_id = ?", userID)
 	}
 
 	if err := query.Find(&tasks).Error; err != nil {
@@ -283,8 +283,14 @@ func generateRecentActivity(tasks []models.Task) []ActivityItem {
 			description = "đã tạo công việc mới"
 		}
 
-		userName := task.CreatedBy.Name
-		userRole := task.CreatedBy.Role
+		userName := "Unknown"
+		userRole := "unknown"
+		
+		if task.CreatedBy != nil {
+			userName = task.CreatedBy.Name
+			userRole = task.CreatedBy.Role
+		}
+		
 		if task.AssignedTo != nil && task.AssignedTo.ID > 0 && activityType != "creation" {
 			userName = task.AssignedTo.Name
 			userRole = task.AssignedTo.Role
@@ -424,8 +430,8 @@ func GetSystemHealth(c *gin.Context) {
 	var activeUserCount int64
 	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
 	database.DB.Model(&models.Task{}).
-		Select("DISTINCT assigned_to").
-		Where("updated_at > ? AND assigned_to IS NOT NULL", sevenDaysAgo).
+		Select("DISTINCT assigned_to_id").
+		Where("updated_at > ? AND assigned_to_id IS NOT NULL", sevenDaysAgo).
 		Count(&activeUserCount)
 
 	// Calculate database response time (simple ping test)

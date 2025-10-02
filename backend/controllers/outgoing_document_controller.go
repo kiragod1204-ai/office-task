@@ -117,11 +117,8 @@ func GetOutgoingDocuments(c *gin.Context) {
 
 	// Apply role-based filtering
 	switch userRole.(string) {
-	case models.RoleSecretary, models.RoleAdmin:
+	case models.RoleSecretary, models.RoleAdmin, models.RoleTeamLeader, models.RoleDeputy:
 		// Can see all documents
-	case models.RoleTeamLeader, models.RoleDeputy:
-		// Can see documents where they are drafter, approver, or creator
-		query = query.Where("drafter_id = ? OR approver_id = ? OR created_by_id = ?", userID, userID, userID)
 	case models.RoleOfficer:
 		// Can see documents where they are drafter or creator
 		query = query.Where("drafter_id = ? OR created_by_id = ?", userID, userID)
@@ -198,14 +195,8 @@ func UpdateOutgoingDocument(c *gin.Context) {
 
 	// Check permissions
 	switch userRole.(string) {
-	case models.RoleSecretary, models.RoleAdmin:
+	case models.RoleSecretary, models.RoleAdmin, models.RoleTeamLeader, models.RoleDeputy:
 		// Can update any document
-	case models.RoleTeamLeader, models.RoleDeputy:
-		// Can update documents where they are drafter, approver, or creator
-		if document.DrafterID != userID.(uint) && document.ApproverID != userID.(uint) && document.CreatedByID != userID.(uint) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Không có quyền chỉnh sửa văn bản này"})
-			return
-		}
 	case models.RoleOfficer:
 		// Can update documents where they are drafter or creator
 		if document.DrafterID != userID.(uint) && document.CreatedByID != userID.(uint) {
@@ -353,7 +344,6 @@ func DeleteOutgoingDocument(c *gin.Context) {
 		return
 	}
 
-	userID, _ := c.Get("user_id")
 	userRole, _ := c.Get("user_role")
 
 	var document models.OutgoingDocument
@@ -364,14 +354,8 @@ func DeleteOutgoingDocument(c *gin.Context) {
 
 	// Check permissions
 	switch userRole.(string) {
-	case models.RoleSecretary, models.RoleAdmin:
+	case models.RoleSecretary, models.RoleAdmin, models.RoleTeamLeader, models.RoleDeputy:
 		// Can delete any document
-	case models.RoleTeamLeader:
-		// Can delete documents created by them or where they are drafter/approver
-		if document.CreatedByID != userID.(uint) && document.DrafterID != userID.(uint) && document.ApproverID != userID.(uint) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Không có quyền xóa văn bản này"})
-			return
-		}
 	default:
 		c.JSON(http.StatusForbidden, gin.H{"error": "Không có quyền xóa văn bản"})
 		return

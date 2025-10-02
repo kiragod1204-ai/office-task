@@ -15,6 +15,8 @@ export interface FileInfo {
   document_id: number;
   access_level: string;
   uploaded_by?: number;
+  order_number?: number;
+  summary?: string;
 }
 
 export interface FileUploadResponse {

@@ -100,6 +100,7 @@ func InitDatabase() {
 	DB.AutoMigrate(&models.SystemNotification{})
 	DB.AutoMigrate(&models.Task{})
 	DB.AutoMigrate(&models.TaskStatusHistory{})
+	DB.AutoMigrate(&models.TaskOutgoingDocument{})
 	DB.AutoMigrate(&models.Comment{})
 	DB.AutoMigrate(&models.AuditLog{})
 	DB.AutoMigrate(&models.IncomingFile{}) // Temporary for backward compatibility
@@ -140,20 +141,27 @@ func createDefaultUsers() {
 }
 
 func runMigrations() {
-	migrationPath := filepath.Join("database", "migrations", "001_enhance_schema.sql")
-
-	// Read the migration file
-	migrationSQL, err := os.ReadFile(migrationPath)
-	if err != nil {
-		log.Printf("Warning: Could not read migration file %s: %v", migrationPath, err)
-		return
+	migrations := []string{
+		"001_enhance_schema.sql",
+		"002_create_task_outgoing_document_table.sql",
 	}
 
-	// Execute the migration
-	if err := DB.Exec(string(migrationSQL)).Error; err != nil {
-		log.Printf("Warning: Error executing migration: %v", err)
-	} else {
-		log.Println("Database migration completed successfully")
+	for _, migrationFile := range migrations {
+		migrationPath := filepath.Join("database", "migrations", migrationFile)
+
+		// Read the migration file
+		migrationSQL, err := os.ReadFile(migrationPath)
+		if err != nil {
+			log.Printf("Warning: Could not read migration file %s: %v", migrationPath, err)
+			continue
+		}
+
+		// Execute the migration
+		if err := DB.Exec(string(migrationSQL)).Error; err != nil {
+			log.Printf("Warning: Error executing migration %s: %v", migrationFile, err)
+		} else {
+			log.Printf("Database migration %s completed successfully", migrationFile)
+		}
 	}
 }
 

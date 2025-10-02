@@ -299,27 +299,49 @@ export const TaskDetailPage: React.FC = () => {
     }
   }
 
-  const handleDownloadOutgoingDocument = async () => {
+  const handleDownloadOutgoingDocument = async (docId?: number) => {
     if (!task) return
-    setDownloadingFile('outgoing')
+    const downloadKey = docId ? `outgoing-${docId}` : 'outgoing'
+    setDownloadingFile(downloadKey)
     try {
-      const response = await apiClient.get(`/tasks/${task.ID}/download/outgoing`, {
-        responseType: 'blob'
-      })
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `van-ban-di-${task.ID}.pdf`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      
-      toast({
-        title: "Tải xuống thành công",
-        description: "Văn bản đi đã được tải xuống",
-      })
+      // For outgoing documents, we need to use the files API with the specific file path
+      // First, get the document details to find the file path
+      if (docId) {
+        const docResponse = await apiClient.get(`/outgoing-documents/${docId}`)
+        const outgoingDoc = docResponse.data
+        
+        if (outgoingDoc.file_path) {
+          // Use the files download API - let the backend handle the filename
+          const { downloadFile } = await import('@/lib/download')
+          await downloadFile(outgoingDoc.file_path, '') // Empty filename lets backend use original name
+          
+          toast({
+            title: "Tải xuống thành công",
+            description: "Văn bản đi đã được tải xuống",
+          })
+        } else {
+          throw new Error("Văn bản không có file đính kèm")
+        }
+      } else {
+        // Fallback to the task endpoint if no specific document ID
+        const response = await apiClient.get(`/tasks/${task.ID}/download/outgoing`, {
+          responseType: 'blob'
+        })
+        
+        const url = window.URL.createObjectURL(new Blob([response.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', `van-ban-di-${task.ID}.pdf`)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        
+        toast({
+          title: "Tải xuống thành công",
+          description: "Văn bản đi đã được tải xuống",
+        })
+      }
     } catch (error) {
       console.error('Download failed:', error)
       toast({

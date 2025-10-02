@@ -116,7 +116,7 @@ func CreateTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, "", models.StatusNotStarted, userID.(uint), "Tạo công việc mới")
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusCreated, task)
 }
@@ -129,7 +129,7 @@ func GetTasks(c *gin.Context) {
 	filterParams := services.ParseTaskFilterParams(c)
 
 	var tasks []models.Task
-	query := database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("Comments.User")
+	query := database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("Comments.User")
 
 	// Filter based on role
 	switch userRole.(string) {
@@ -163,6 +163,16 @@ func GetTasks(c *gin.Context) {
 		return
 	}
 
+	// Manually load CreatedBy for tasks where preload didn't work
+	for i := range tasks {
+		if tasks[i].CreatedBy == nil && tasks[i].CreatedByID > 0 {
+			var creator models.User
+			if err := database.DB.First(&creator, tasks[i].CreatedByID).Error; err == nil {
+				tasks[i].CreatedBy = &creator
+			}
+		}
+	}
+
 	// Add remaining time information to each task
 	type TaskWithRemainingTime struct {
 		models.Task
@@ -186,6 +196,106 @@ func GetTasks(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// SubmitForReview allows officers to submit their completed work for review by Team Leader/Deputy
+func SubmitForReview(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID không hợp lệ"})
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	userRole, _ := c.Get("user_role")
+
+	var task models.Task
+	if err := database.DB.First(&task, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy công việc"})
+		return
+	}
+
+	// Check if user is an officer
+	if userRole.(string) != models.RoleOfficer {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Chỉ Cán bộ mới có thể nộp công việc để xem xét"})
+		return
+	}
+
+	// Check if the task is assigned to this officer
+	if task.AssignedToID == nil || *task.AssignedToID != userID.(uint) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Chỉ có thể nộp công việc được giao cho mình"})
+		return
+	}
+
+	// Check if task is in processing status (can only submit from processing status)
+	if task.Status != models.StatusProcessing {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Chỉ có thể nộp công việc đang trong trạng thái xử lý"})
+		return
+	}
+
+	// Find the Team Leader or Deputy who should review this task
+	// Look for the creator of the task or find a default reviewer
+	var reviewer models.User
+	reviewerFound := false
+
+	// First, try to find the creator if they are Team Leader or Deputy
+	if task.CreatedByID > 0 {
+		if err := database.DB.First(&reviewer, task.CreatedByID).Error; err == nil {
+			if reviewer.Role == models.RoleTeamLeader || reviewer.Role == models.RoleDeputy {
+				reviewerFound = true
+			}
+		}
+	}
+
+	// If creator is not a Team Leader/Deputy, find any active Team Leader
+	if !reviewerFound {
+		if err := database.DB.Where("role = ? AND is_active = ?", models.RoleTeamLeader, true).First(&reviewer).Error; err == nil {
+			reviewerFound = true
+		}
+	}
+
+	// If no Team Leader found, try to find a Deputy
+	if !reviewerFound {
+		if err := database.DB.Where("role = ? AND is_active = ?", models.RoleDeputy, true).First(&reviewer).Error; err == nil {
+			reviewerFound = true
+		}
+	}
+
+	if !reviewerFound {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không tìm thấy Trưởng Công An Xã hoặc Phó Công An Xã để xem xét"})
+		return
+	}
+
+	oldStatus := task.Status
+	task.Status = models.StatusReview
+
+	// Update the assigned user to the reviewer for review
+	task.AssignedToID = &reviewer.ID
+
+	if err := database.DB.Save(&task).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể cập nhật trạng thái công việc"})
+		return
+	}
+
+	// Create status history
+	notes := fmt.Sprintf("Cán bộ %s đã nộp công việc để %s xem xét", 
+		func() string {
+			var officer models.User
+			if err := database.DB.First(&officer, userID.(uint)).Error; err == nil {
+				return officer.Name
+			}
+			return "Cán bộ"
+		}(), reviewer.Name)
+	createTaskStatusHistory(task.ID, oldStatus, task.Status, userID.(uint), notes)
+
+	// Load relations
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"task":     task,
+		"reviewer": reviewer,
+		"message":  fmt.Sprintf("Công việc đã được nộp cho %s để xem xét", reviewer.Name),
+	})
+}
+
 func GetTask(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -194,9 +304,17 @@ func GetTask(c *gin.Context) {
 	}
 
 	var task models.Task
-	if err := database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("Comments.User").Preload("StatusHistory.ChangedBy").First(&task, id).Error; err != nil {
+	if err := database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("Comments.User").Preload("StatusHistory.ChangedBy").First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy công việc"})
 		return
+	}
+
+	// Manually load CreatedBy if preload didn't work
+	if task.CreatedBy == nil && task.CreatedByID > 0 {
+		var creator models.User
+		if err := database.DB.First(&creator, task.CreatedByID).Error; err == nil {
+			task.CreatedBy = &creator
+		}
 	}
 
 	// Add remaining time information
@@ -208,6 +326,11 @@ func GetTask(c *gin.Context) {
 	taskWithTime := TaskWithRemainingTime{
 		Task:          task,
 		RemainingTime: task.GetRemainingTime(),
+	}
+
+	// Populate Creator field for compatibility
+	if taskWithTime.CreatedBy != nil {
+		taskWithTime.Creator = taskWithTime.CreatedBy
 	}
 
 	c.JSON(http.StatusOK, taskWithTime)
@@ -253,7 +376,7 @@ func AssignTask(c *gin.Context) {
 	}
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -283,7 +406,12 @@ func GetTaskWorkflow(c *gin.Context) {
 			"completed":   true,
 			"current":     task.Status == models.StatusReceived,
 			"timestamp":   task.CreatedAt,
-			"user":        task.CreatedBy.Name,
+			"user":        func() string {
+				if task.CreatedBy != nil {
+					return task.CreatedBy.Name
+				}
+				return ""
+			}(),
 		},
 		{
 			"id":          2,
@@ -369,7 +497,12 @@ func GetTaskWorkflow(c *gin.Context) {
 				}
 				return ""
 			}(),
-			"created_by":    task.CreatedBy.Name,
+			"created_by": func() string {
+				if task.CreatedBy != nil {
+					return task.CreatedBy.Name
+				}
+				return ""
+			}(),
 			"has_report":    task.ReportFile != "",
 			"total_stages":  len(stages),
 			"current_stage": getCurrentStageIndex(task.Status),
@@ -442,7 +575,7 @@ func UpdateTaskStatus(c *gin.Context) {
 	createTaskStatusHistory(task.ID, oldStatus, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -554,7 +687,7 @@ func UpdateTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, task.Status, task.Status, userID.(uint), "Cập nhật thông tin công việc")
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -680,7 +813,7 @@ func ForwardTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, task.Status, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -763,7 +896,7 @@ func DelegateTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, task.Status, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -873,13 +1006,28 @@ func DownloadTaskIncomingDocument(c *gin.Context) {
 		return
 	}
 
-	// Check if file exists
-	if task.IncomingDocument.FilePath == "" {
+	// Look for file in the files table using a more reliable approach
+	var file struct {
+		ID           uint   `json:"id"`
+		OriginalName string `json:"original_name"`
+		FileName     string `json:"file_name"`
+		FilePath     string `json:"file_path"`
+		FileSize     int64  `json:"file_size"`
+		MimeType     string `json:"mime_type"`
+		UploadedAt   string `json:"uploaded_at"`
+		DocumentID   int    `json:"document_id"`
+		UploadedBy   uint   `json:"uploaded_by"`
+	}
+
+	if err := database.DB.Table("files").
+		Select("id, original_name, file_name, file_path, file_size, mime_type, uploaded_at, document_id, uploaded_by").
+		Where("document_type = ? AND document_id = ?", "incoming", task.IncomingDocument.ID).
+		First(&file).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Văn bản không có file đính kèm"})
 		return
 	}
 
-	filePath := task.IncomingDocument.FilePath
+	filePath := file.FilePath
 	osFilePath := filepath.FromSlash(filePath)
 
 	if _, err := os.Stat(osFilePath); os.IsNotExist(err) {
@@ -887,15 +1035,28 @@ func DownloadTaskIncomingDocument(c *gin.Context) {
 		return
 	}
 
-	// Generate download filename
-	filename := fmt.Sprintf("van-ban-den-%d-%s.pdf", task.IncomingDocument.ArrivalNumber,
-		strings.ReplaceAll(task.IncomingDocument.Summary, " ", "-"))
+	// Generate download filename using the original uploaded file name
+	filename := file.OriginalName
+	if filename == "" {
+		// Fallback to generated name if original name is empty
+		originalExt := filepath.Ext(file.FileName)
+		if originalExt == "" {
+			originalExt = ".pdf" // Default fallback
+		}
+		filename = fmt.Sprintf("van-ban-den-%d-%s%s", task.IncomingDocument.ArrivalNumber,
+			strings.ReplaceAll(task.IncomingDocument.Summary, " ", "-"), originalExt)
+	}
 
-	// Set headers for download
+	// Set headers for download with dynamic content type
+	contentType := file.MimeType
+	if contentType == "" {
+		contentType = "application/octet-stream" // Default fallback
+	}
+
 	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Transfer-Encoding", "binary")
 	c.Header("Content-Disposition", "attachment; filename="+filename)
-	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Type", contentType)
 
 	c.File(osFilePath)
 }
@@ -923,17 +1084,6 @@ func DownloadTaskOutgoingDocument(c *gin.Context) {
 		return
 	}
 
-	// Find outgoing document related to this task (through task report or other relationship)
-	// For now, we'll look for outgoing documents created by the same user or around the same time
-	var outgoingDoc models.OutgoingDocument
-	if err := database.DB.Where("created_by_id = ? AND created_at >= ? AND created_at <= ?",
-		task.CreatedByID,
-		task.CreatedAt.Add(-24*time.Hour),
-		task.CreatedAt.Add(24*time.Hour)).First(&outgoingDoc).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy văn bản đi liên quan"})
-		return
-	}
-
 	// Check if user has access to this task
 	canAccess := false
 	switch userRole.(string) {
@@ -950,31 +1100,10 @@ func DownloadTaskOutgoingDocument(c *gin.Context) {
 		return
 	}
 
-	// Check if file exists
-	if outgoingDoc.FilePath == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Văn bản không có file đính kèm"})
-		return
-	}
-
-	filePath := outgoingDoc.FilePath
-	osFilePath := filepath.FromSlash(filePath)
-
-	if _, err := os.Stat(osFilePath); os.IsNotExist(err) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "File không tồn tại"})
-		return
-	}
-
-	// Generate download filename
-	filename := fmt.Sprintf("van-ban-di-%s-%s.pdf", outgoingDoc.DocumentNumber,
-		strings.ReplaceAll(outgoingDoc.Summary, " ", "-"))
-
-	// Set headers for download
-	c.Header("Content-Description", "File Transfer")
-	c.Header("Content-Transfer-Encoding", "binary")
-	c.Header("Content-Disposition", "attachment; filename="+filename)
-	c.Header("Content-Type", "application/pdf")
-
-	c.File(osFilePath)
+	// Currently, there's no direct relationship between tasks and outgoing documents
+	// Return 404 to indicate no outgoing document is linked to this task
+	c.JSON(http.StatusNotFound, gin.H{"error": "Công việc này không có văn bản đi liên quan"})
+	return
 }
 
 // GetTaskDocuments returns all documents (incoming and outgoing) related to a task
@@ -1016,12 +1145,19 @@ func GetTaskDocuments(c *gin.Context) {
 		return
 	}
 
-	// Find outgoing documents related to this task (through task report or other relationship)
+	// Find outgoing documents related to this task using proper relationships
+	var taskOutgoingDocs []models.TaskOutgoingDocument
+	if err := database.DB.Preload("OutgoingDocument.DocumentType").Preload("OutgoingDocument.IssuingUnit").
+		Where("task_id = ?", taskID).Find(&taskOutgoingDocs).Error; err != nil {
+		// If no relationships found, return empty array
+		taskOutgoingDocs = []models.TaskOutgoingDocument{}
+	}
+
+	// Extract outgoing documents from relationships
 	var outgoingDocs []models.OutgoingDocument
-	database.DB.Preload("DocumentType").Preload("IssuingUnit").Where("created_by_id = ? AND created_at >= ? AND created_at <= ?",
-		task.CreatedByID,
-		task.CreatedAt.Add(-24*time.Hour),
-		task.CreatedAt.Add(24*time.Hour)).Find(&outgoingDocs)
+	for _, relationship := range taskOutgoingDocs {
+		outgoingDocs = append(outgoingDocs, relationship.OutgoingDocument)
+	}
 
 	// Prepare response
 	response := gin.H{

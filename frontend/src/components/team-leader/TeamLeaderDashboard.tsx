@@ -436,7 +436,7 @@ export const TeamLeaderDashboard: React.FC = () => {
             <div>
               <h4 className="font-medium mb-3">Hiệu suất nhóm</h4>
               <div className="space-y-3">
-                {dashboardStats?.user_performance.slice(0, 4).map((perf) => (
+                {dashboardStats?.user_performance?.slice(0, 4).map((perf) => (
                   <div key={perf.user_id} className="space-y-1">
                     <div className="flex justify-between text-sm">
                       <span className="truncate">{perf.user_name}</span>
@@ -444,7 +444,7 @@ export const TeamLeaderDashboard: React.FC = () => {
                     </div>
                     <Progress value={perf.completion_rate} className="h-2" />
                   </div>
-                ))}
+                )) || <p className="text-sm text-gray-500">Không có dữ liệu hiệu suất</p>}
               </div>
             </div>
 

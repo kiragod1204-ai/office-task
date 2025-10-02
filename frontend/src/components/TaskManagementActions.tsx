@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast'
 import { tasksApi, Task, UpdateTaskRequest, ForwardTaskRequest } from '@/api/tasks'
 import { usersApi, User as UserType } from '@/api/users'
 import { filesApi } from '@/api/files'
-import { Edit, Trash2, Forward, AlertTriangle, Search, X, User, Settings } from 'lucide-react'
+import { Edit, Trash2, Forward, AlertTriangle, Search, X, User, Settings, Send } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { ComprehensiveTaskInterface } from './tasks/ComprehensiveTaskInterface'
 
@@ -124,6 +124,35 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
   const canForward = () => {
     if (!user) return false
     return ['Trưởng Công An Xã', 'Phó Công An Xã'].includes(user.role)
+  }
+
+  const canSubmitForReview = () => {
+    if (!user) return false
+    if (user.role !== 'Cán bộ') return false
+    if (task.assigned_to_id !== user.id) return false
+    if (task.status !== 'Đang xử lí') return false
+    return true
+  }
+
+  const handleSubmitForReview = async () => {
+    setLoading(true)
+    try {
+      const result = await tasksApi.submitForReview(task.ID)
+      onTaskUpdate(result.task)
+      
+      toast({
+        title: "Nộp công việc thành công",
+        description: result.message,
+      })
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Lỗi nộp công việc",
+        description: error.response?.data?.error || "Không thể nộp công việc để xem xét",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const filterUsers = (searchTerm: string) => {
@@ -256,7 +285,7 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
     }
   }
 
-  if (!canEdit() && !canDelete() && !canForward()) {
+  if (!canEdit() && !canDelete() && !canForward() && !canSubmitForReview()) {
     return null
   }
 
@@ -284,6 +313,17 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
               <DialogTitle>Chỉnh sửa công việc</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+              {/* Creator Information - Read Only */}
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <Label className="text-sm font-medium text-gray-700">Người tạo:</Label>
+                <div className="mt-1 flex items-center">
+                  <span className="font-medium">{task.creator?.name || task.created_by?.name}</span>
+                  <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    {task.creator?.role || task.created_by?.role}
+                  </span>
+                </div>
+              </div>
+              
               <div>
                 <Label htmlFor="description">Mô tả công việc</Label>
                 <Textarea
@@ -367,9 +407,9 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
                     {(incomingFiles || [])
                       .filter(file => (file?.ID || file?.id) && (file.ID > 0 || file.id > 0))
                       .map((file) => (
-                        <SelectItem key={file.ID || file.id} value={(file.ID || file.id).toString()}>
-                          #{file.order_number} - {file.file_name}
-                        </SelectItem>
+                      <SelectItem key={file.ID || file.id} value={(file.ID || file.id).toString()}>
+                        #{file.order_number} - {file.summary || file.file_name}
+                      </SelectItem>
                       ))}
                   </SelectContent>
                 </Select>
@@ -614,6 +654,18 @@ export const TaskManagementActions: React.FC<TaskManagementActionsProps> = ({
             </div>
           </DialogContent>
         </Dialog>
+        )}
+
+      {canSubmitForReview() && (
+        <Button 
+          variant="outline" 
+          className="w-full justify-start"
+          onClick={handleSubmitForReview}
+          disabled={loading}
+        >
+          <Send className="w-4 h-4 mr-2" />
+          Nộp để xem xét
+        </Button>
       )}
 
       {canDelete() && (

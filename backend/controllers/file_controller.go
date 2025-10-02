@@ -204,7 +204,8 @@ func UploadReportFile(c *gin.Context) {
 }
 
 func GetIncomingFiles(c *gin.Context) {
-	// Query the new files table for incoming documents
+	// Query the new files table for incoming documents with document information
+	// Only include non-deleted files
 	var files []struct {
 		ID           uint   `json:"id"`
 		OriginalName string `json:"original_name"`
@@ -215,14 +216,18 @@ func GetIncomingFiles(c *gin.Context) {
 		UploadedAt   string `json:"uploaded_at"`
 		DocumentID   int    `json:"document_id"`
 		UploadedBy   uint   `json:"uploaded_by"`
+		OrderNumber  int    `json:"order_number"`
+		Summary      string `json:"summary"`
 	}
 
 	query := `
-		SELECT id, original_name, file_name, file_path, file_size, mime_type, 
-		       uploaded_at, document_id, uploaded_by
-		FROM files 
-		WHERE document_type = 'incoming' AND deleted_at IS NULL
-		ORDER BY uploaded_at DESC
+		SELECT f.id, f.original_name, f.file_name, f.file_path, f.file_size, f.mime_type, 
+		       f.uploaded_at, f.document_id, f.uploaded_by,
+		       id.arrival_number as order_number, id.summary
+		FROM files f
+		LEFT JOIN incoming_documents id ON f.document_id = id.id
+		WHERE f.document_type = 'incoming' AND f.deleted_at IS NULL
+		ORDER BY f.uploaded_at DESC
 	`
 
 	if err := database.DB.Raw(query).Scan(&files).Error; err != nil {

@@ -223,7 +223,7 @@ func DeleteUser(c *gin.Context) {
 
 	// Check if user has active tasks
 	var taskCount int64
-	database.DB.Model(&models.Task{}).Where("assigned_to = ? OR created_by = ?", id, id).Count(&taskCount)
+	database.DB.Model(&models.Task{}).Where("assigned_to_id = ? OR created_by_id = ?", id, id).Count(&taskCount)
 	if taskCount > 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Không thể xóa người dùng có công việc đang thực hiện"})
 		return

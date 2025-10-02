@@ -248,6 +248,9 @@ export const OutgoingDocumentManagement: React.FC = () => {
                       documentType="outgoing"
                       documentId={selectedDocument.id}
                       onDownload={handleFileDownloadInView}
+                      onFileUpdate={() => setRefreshTrigger(prev => prev + 1)}
+                      allowEdit={true}
+                      allowDelete={true}
                     />
                   </div>
                 </div>

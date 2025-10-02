@@ -228,5 +228,10 @@ export const tasksApi = {
   getTaskStatusHistory: async (id: number): Promise<TaskStatusHistory[]> => {
     const response = await apiClient.get(`/tasks/${id}/history`)
     return response.data
+  },
+
+  submitForReview: async (id: number): Promise<{ task: Task; reviewer: any; message: string }> => {
+    const response = await apiClient.post(`/tasks/${id}/submit-review`)
+    return response.data
   }
 }
