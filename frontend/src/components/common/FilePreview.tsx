@@ -17,7 +17,6 @@ const FilePreview: React.FC<FilePreviewProps> = ({
   onDownload,
   onDelete,
   showActions = true,
-  showThumbnails = false,
   className = '',
 }) => {
   if (!files || files.length === 0) {

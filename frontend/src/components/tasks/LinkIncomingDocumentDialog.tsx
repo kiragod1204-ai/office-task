@@ -4,19 +4,19 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { tasksApi, TaskOutgoingDocument } from '@/api/tasks';
-import { outgoingDocumentApi, OutgoingDocument } from '@/api/outgoing-documents';
+import { tasksApi } from '@/api/tasks';
+import { incomingDocumentApi, IncomingDocument } from '@/api/incoming-documents';
 import { Search, Link, Unlink, FileText, Calendar, X, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 
-interface LinkOutgoingDocumentDialogProps {
+interface LinkIncomingDocumentDialogProps {
   taskId: number;
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
 }
 
-export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProps> = ({
+export const LinkIncomingDocumentDialog: React.FC<LinkIncomingDocumentDialogProps> = ({
   taskId,
   isOpen,
   onClose,
@@ -25,21 +25,21 @@ export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProp
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [documents, setDocuments] = useState<OutgoingDocument[]>([]);
-  const [linkedDocuments, setLinkedDocuments] = useState<TaskOutgoingDocument[]>([]);
-  const [linking, setLinking] = useState<number | null>(null);
+  const [documents, setDocuments] = useState<IncomingDocument[]>([]);
+  const [linkedDocumentId, setLinkedDocumentId] = useState<number | null>(null);
+  const [linking, setLinking] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       loadDocuments();
-      loadLinkedDocuments();
+      loadLinkedDocument();
     }
   }, [isOpen, taskId]);
 
   const loadDocuments = async () => {
     setLoading(true);
     try {
-      const response = await outgoingDocumentApi.getOutgoingDocuments({
+      const response = await incomingDocumentApi.getAll({
         limit: 50
       });
       setDocuments(response.documents || []);
@@ -47,7 +47,7 @@ export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProp
       console.error('Error loading documents:', error);
       toast({
         title: 'Lỗi',
-        description: 'Không thể tải danh sách văn bản đi',
+        description: 'Không thể tải danh sách văn bản đến',
         variant: 'destructive',
       });
     } finally {
@@ -55,36 +55,28 @@ export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProp
     }
   };
 
-  const loadLinkedDocuments = async () => {
+  const loadLinkedDocument = async () => {
     try {
-      const linked = await tasksApi.getTaskOutgoingDocuments(taskId);
-      setLinkedDocuments(linked || []);
-    } catch (error: any) {
-      console.error('Error loading linked documents:', error);
-      // Don't show error toast for 400/404 - just means no linked documents yet
-      if (error.response?.status !== 400 && error.response?.status !== 404) {
-        toast({
-          title: 'Lỗi',
-          description: 'Không thể tải danh sách văn bản liên kết',
-          variant: 'destructive',
-        });
-      }
+      const task = await tasksApi.getTask(taskId);
+      setLinkedDocumentId(task.incoming_document_id || null);
+    } catch (error) {
+      console.error('Error loading linked document:', error);
     }
   };
 
   const handleLink = async (documentId: number) => {
-    setLinking(documentId);
+    setLinking(true);
     try {
-      await tasksApi.linkOutgoingDocument(taskId, {
-        outgoing_document_id: documentId
+      await tasksApi.linkIncomingDocument(taskId, {
+        incoming_document_id: documentId
       });
       
       toast({
         title: 'Thành công',
-        description: 'Đã liên kết văn bản đi với công việc',
+        description: 'Đã liên kết văn bản đến với công việc',
       });
       
-      await loadLinkedDocuments();
+      setLinkedDocumentId(documentId);
       if (onSuccess) onSuccess();
     } catch (error: any) {
       toast({
@@ -93,21 +85,21 @@ export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProp
         variant: 'destructive',
       });
     } finally {
-      setLinking(null);
+      setLinking(false);
     }
   };
 
-  const handleUnlink = async (documentId: number) => {
-    setLinking(documentId);
+  const handleUnlink = async () => {
+    setLinking(true);
     try {
-      await tasksApi.unlinkOutgoingDocument(taskId, documentId);
+      await tasksApi.unlinkIncomingDocument(taskId);
       
       toast({
         title: 'Thành công',
-        description: 'Đã hủy liên kết văn bản đi',
+        description: 'Đã hủy liên kết văn bản đến',
       });
       
-      await loadLinkedDocuments();
+      setLinkedDocumentId(null);
       if (onSuccess) onSuccess();
     } catch (error: any) {
       toast({
@@ -116,35 +108,32 @@ export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProp
         variant: 'destructive',
       });
     } finally {
-      setLinking(null);
+      setLinking(false);
     }
-  };
-
-  const isLinked = (documentId: number) => {
-    return linkedDocuments.some(ld => ld.outgoing_document_id === documentId);
   };
 
   const filteredDocuments = documents.filter(doc => {
     if (!searchTerm) return true;
     const search = searchTerm.toLowerCase();
     return (
-      doc.document_number.toLowerCase().includes(search) ||
+      String(doc.arrival_number).toLowerCase().includes(search) ||
+      doc.original_number.toLowerCase().includes(search) ||
       doc.summary.toLowerCase().includes(search)
     );
   });
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
-      case 'draft':
+      case 'received':
         return 'bg-gray-100 text-gray-800';
-      case 'review':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'approved':
-        return 'bg-green-100 text-green-800';
-      case 'sent':
+      case 'forwarded':
         return 'bg-blue-100 text-blue-800';
-      case 'rejected':
-        return 'bg-red-100 text-red-800';
+      case 'assigned':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'processing':
+        return 'bg-orange-100 text-orange-800';
+      case 'completed':
+        return 'bg-green-100 text-green-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -152,14 +141,16 @@ export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProp
 
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
-      draft: 'Bản thảo',
-      review: 'Đang xem xét',
-      approved: 'Đã phê duyệt',
-      sent: 'Đã gửi',
-      rejected: 'Từ chối'
+      received: 'Đã tiếp nhận',
+      forwarded: 'Đã chuyển tiếp',
+      assigned: 'Đã giao việc',
+      processing: 'Đang xử lý',
+      completed: 'Hoàn thành'
     };
     return labels[status] || status;
   };
+
+  const linkedDocument = linkedDocumentId ? documents.find(d => d.ID === linkedDocumentId) : null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -167,52 +158,48 @@ export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProp
         <DialogHeader>
           <DialogTitle className="flex items-center">
             <Link className="w-5 h-5 mr-2" />
-            Liên kết văn bản đi
+            Liên kết văn bản đến
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col space-y-4">
-          {/* Linked Documents Section */}
-          {linkedDocuments.length > 0 && (
+          {/* Linked Document Section */}
+          {linkedDocument && (
             <div className="border-b pb-4">
               <h3 className="text-sm font-semibold mb-2 text-gray-700">
-                Văn bản đã liên kết ({linkedDocuments.length})
+                Văn bản đã liên kết
               </h3>
-              <div className="space-y-2">
-                {linkedDocuments.map((linked) => (
-                  <div
-                    key={linked.ID}
-                    className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-blue-600" />
-                        <span className="font-medium text-sm">
-                          {linked.outgoing_document?.document_number}
-                        </span>
-                        <Badge className={`text-xs ${getStatusBadgeClass(linked.outgoing_document?.status || '')}`}>
-                          {getStatusLabel(linked.outgoing_document?.status || '')}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-1 ml-6">
-                        {linked.outgoing_document?.summary}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleUnlink(linked.outgoing_document_id)}
-                      disabled={linking === linked.outgoing_document_id}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      {linking === linked.outgoing_document_id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Unlink className="w-4 h-4" />
-                      )}
-                    </Button>
+              <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    <span className="font-medium text-sm">
+                      Số đến: {linkedDocument.arrival_number}
+                    </span>
+                    <Badge className={`text-xs ${getStatusBadgeClass(linkedDocument.status)}`}>
+                      {getStatusLabel(linkedDocument.status)}
+                    </Badge>
                   </div>
-                ))}
+                  <p className="text-xs text-gray-600 mt-1 ml-6">
+                    {linkedDocument.summary}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1 ml-6">
+                    Số ký hiệu: {linkedDocument.original_number}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleUnlink}
+                  disabled={linking}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  {linking ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Unlink className="w-4 h-4" />
+                  )}
+                </Button>
               </div>
             </div>
           )}
@@ -221,7 +208,7 @@ export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProp
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
-              placeholder="Tìm kiếm văn bản đi..."
+              placeholder="Tìm kiếm văn bản đến..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 pr-10"
@@ -248,14 +235,14 @@ export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProp
             ) : filteredDocuments.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <FileText className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                <p>Không tìm thấy văn bản đi</p>
+                <p>Không tìm thấy văn bản đến</p>
               </div>
             ) : (
               filteredDocuments.map((doc) => {
-                const linked = isLinked(doc.id);
+                const linked = doc.ID === linkedDocumentId;
                 return (
                   <div
-                    key={doc.id}
+                    key={doc.ID}
                     className={`p-3 border rounded-lg transition-colors ${
                       linked
                         ? 'bg-gray-50 border-gray-300'
@@ -266,17 +253,20 @@ export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProp
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-semibold text-sm text-blue-600">
-                            {doc.document_number}
+                            Số đến: {doc.arrival_number}
                           </span>
                           <Badge className={`text-xs ${getStatusBadgeClass(doc.status)}`}>
                             {getStatusLabel(doc.status)}
                           </Badge>
                         </div>
-                        <p className="text-sm text-gray-700 mb-2">{doc.summary}</p>
+                        <p className="text-sm text-gray-700 mb-1">{doc.summary}</p>
+                        <p className="text-xs text-gray-500 mb-2">
+                          Số ký hiệu: {doc.original_number}
+                        </p>
                         <div className="flex items-center gap-4 text-xs text-gray-500">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
-                            {format(new Date(doc.issue_date), 'dd/MM/yyyy')}
+                            {format(new Date(doc.arrival_date), 'dd/MM/yyyy')}
                           </span>
                           <span className="flex items-center gap-1">
                             <FileText className="w-3 h-3" />
@@ -287,11 +277,11 @@ export const LinkOutgoingDocumentDialog: React.FC<LinkOutgoingDocumentDialogProp
                       <Button
                         variant={linked ? 'outline' : 'default'}
                         size="sm"
-                        onClick={() => linked ? handleUnlink(doc.id) : handleLink(doc.id)}
-                        disabled={linking === doc.id}
+                        onClick={() => linked ? handleUnlink() : handleLink(doc.ID)}
+                        disabled={linking || (linkedDocumentId !== null && !linked)}
                         className={linked ? 'text-red-600 hover:text-red-700' : ''}
                       >
-                        {linking === doc.id ? (
+                        {linking ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
                         ) : linked ? (
                           <>

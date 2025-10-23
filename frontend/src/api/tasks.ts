@@ -288,5 +288,16 @@ export const tasksApi = {
   getTaskOutgoingDocuments: async (taskId: number): Promise<TaskOutgoingDocument[]> => {
     const response = await apiClient.get(`/tasks/${taskId}/outgoing-documents`)
     return Array.isArray(response.data) ? response.data : []
+  },
+
+  // Incoming Document Linking
+  linkIncomingDocument: async (taskId: number, data: { incoming_document_id: number }): Promise<Task> => {
+    const response = await apiClient.put(`/tasks/${taskId}`, data)
+    return response.data
+  },
+
+  unlinkIncomingDocument: async (taskId: number): Promise<Task> => {
+    const response = await apiClient.put(`/tasks/${taskId}`, { incoming_document_id: null })
+    return response.data
   }
 }

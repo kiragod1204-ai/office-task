@@ -34,6 +34,7 @@ import { TaskManagementActions } from '@/components/TaskManagementActions'
 import { TaskStatusHistory } from '@/components/tasks/TaskStatusHistory'
 import { ViewTaskDocuments } from '@/components/common/ViewTaskDocuments'
 import { LinkOutgoingDocumentDialog } from '@/components/tasks/LinkOutgoingDocumentDialog'
+import { LinkIncomingDocumentDialog } from '@/components/tasks/LinkIncomingDocumentDialog'
 
 export const TaskDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -55,6 +56,7 @@ export const TaskDetailPage: React.FC = () => {
   const [workflow, setWorkflow] = useState<any>(null)
   const [workflowLoading, setWorkflowLoading] = useState(false)
   const [linkDocDialogOpen, setLinkDocDialogOpen] = useState(false)
+  const [linkIncomingDocDialogOpen, setLinkIncomingDocDialogOpen] = useState(false)
   const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0)
 
   useEffect(() => {
@@ -611,6 +613,14 @@ export const TaskDetailPage: React.FC = () => {
                 <Button
                   variant="outline"
                   className="w-full justify-start"
+                  onClick={() => setLinkIncomingDocDialogOpen(true)}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Liên kết văn bản đến
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
                   onClick={() => setLinkDocDialogOpen(true)}
                 >
                   <FileText className="w-4 h-4 mr-2" />
@@ -779,6 +789,18 @@ export const TaskDetailPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Link Incoming Document Dialog */}
+      <LinkIncomingDocumentDialog
+        taskId={task.ID}
+        isOpen={linkIncomingDocDialogOpen}
+        onClose={() => setLinkIncomingDocDialogOpen(false)}
+        onSuccess={() => {
+          // Refresh task data and documents to show updated linked document
+          tasksApi.getTask(task.ID).then(setTask);
+          setDocumentsRefreshTrigger(prev => prev + 1);
+        }}
+      />
 
       {/* Link Outgoing Document Dialog */}
       <LinkOutgoingDocumentDialog

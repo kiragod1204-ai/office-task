@@ -158,9 +158,9 @@ export const OutgoingDocumentForm: React.FC<OutgoingDocumentFormProps> = ({
     });
   };
 
-  const handleFileDownload = async (filePath: string, fileName: string) => {
+  const handleFileDownload = async (file: any) => {
     try {
-      await downloadFile(filePath, fileName);
+      await downloadFile(file.file_path, file.original_name);
     } catch (error) {
       toast({
         title: 'Lỗi',

@@ -4,7 +4,7 @@ import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { X, Download, ZoomIn, ZoomOut, Maximize2, FileText, ChevronLeft, ChevronRight, RotateCw } from 'lucide-react';
+import { Download, ZoomIn, ZoomOut, Maximize2, FileText, ChevronLeft, ChevronRight, RotateCw, Printer } from 'lucide-react';
 
 // Set up PDF.js worker from local file (works offline)
 // The worker file should be copied to public/pdf-worker/ during build
@@ -130,6 +130,47 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
 
   const goToNextPage = () => {
     setPageNumber(prev => Math.min(prev + 1, numPages));
+  };
+
+  const handlePrint = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9090/api';
+      
+      // Fetch file again with authentication
+      const response = await fetch(
+        `${baseUrl}/files/preview?path=${encodeURIComponent(filePath)}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      
+      if (!response.ok) {
+        throw new Error('Không thể tải file');
+      }
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      // Open in new window for printing
+      const printWindow = window.open(url, '_blank');
+      
+      if (printWindow) {
+        printWindow.onload = () => {
+          printWindow.focus();
+          setTimeout(() => {
+            printWindow.print();
+          }, 250);
+        };
+        
+        // Cleanup after print dialog closes
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+        }, 60000);
+      } else {
+        console.error('Popup blocked - please allow popups for this site');
+      }
+    } catch (error) {
+      console.error('Print error:', error);
+    }
   };
 
   const renderPreview = () => {
@@ -300,14 +341,16 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
               <Button variant="ghost" size="sm" onClick={toggleFullscreen} title="Toàn màn hình">
                 <Maximize2 className="w-4 h-4" />
               </Button>
+              {(isPDF || isImage) && (
+                <Button variant="ghost" size="sm" onClick={handlePrint} title="In">
+                  <Printer className="w-4 h-4" />
+                </Button>
+              )}
               {onDownload && (
                 <Button variant="ghost" size="sm" onClick={onDownload} title="Tải xuống">
                   <Download className="w-4 h-4" />
                 </Button>
               )}
-              <Button variant="ghost" size="sm" onClick={onClose} title="Đóng">
-                <X className="w-4 h-4" />
-              </Button>
             </div>
           </div>
         </DialogHeader>

@@ -22,14 +22,12 @@ import {
   Download, 
   UserCheck,
   Calendar,
-  FileText,
   Building,
   User,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
 
 interface IncomingDocumentListProps {
   onEdit?: (document: IncomingDocument) => void;

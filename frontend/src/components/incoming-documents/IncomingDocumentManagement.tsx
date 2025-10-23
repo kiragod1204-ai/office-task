@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { IncomingDocumentForm } from './IncomingDocumentForm';
 import { IncomingDocumentList } from './IncomingDocumentList';
 import { ProcessorAssignmentDialog } from './ProcessorAssignmentDialog';
-import { ViewDocumentFiles } from '../common/ViewDocumentFiles';
+
 import { 
   IncomingDocument, 
   CreateIncomingDocumentRequest, 
@@ -146,22 +146,7 @@ export const IncomingDocumentManagement: React.FC = () => {
     setRefreshKey(prev => prev + 1);
   };
 
-  const handleFileDownload = async (filePath: string, fileName: string) => {
-    try {
-      const { downloadFile } = await import('../../api/files');
-      await downloadFile(filePath, fileName);
-      toast({
-        title: 'Thành công',
-        description: 'Tải file thành công',
-      });
-    } catch (error) {
-      toast({
-        title: 'Lỗi',
-        description: 'Không thể tải file xuống',
-        variant: 'destructive',
-      });
-    }
-  };
+
 
 
 

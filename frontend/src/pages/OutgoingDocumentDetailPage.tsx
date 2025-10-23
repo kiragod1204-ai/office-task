@@ -23,6 +23,7 @@ import {
   Loader2,
   Send,
   Eye,
+  Printer,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -332,7 +333,7 @@ export const OutgoingDocumentDetailPage: React.FC = () => {
                     />
                     <Button
                       size="sm"
-                      onClick={() => document.getElementById('file-upload')?.click()}
+                      onClick={() => window.document.getElementById('file-upload')?.click()}
                       disabled={uploading}
                     >
                       {uploading ? (
@@ -422,19 +423,79 @@ export const OutgoingDocumentDetailPage: React.FC = () => {
                           <Download className="w-4 h-4" />
                         </Button>
                         {(file.mime_type === 'application/pdf' || file.mime_type?.startsWith('image/')) && (
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            onClick={() => setPreviewFile({
-                              path: file.file_path,
-                              name: file.original_name,
-                              mimeType: file.mime_type
-                            })}
-                            className="flex-shrink-0"
-                            title="Xem trước"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
+                          <>
+                            <Button 
+                              size="sm" 
+                              variant="ghost"
+                              onClick={() => setPreviewFile({
+                                path: file.file_path,
+                                name: file.original_name,
+                                mimeType: file.mime_type
+                              })}
+                              className="flex-shrink-0"
+                              title="Xem trước"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            {file.mime_type === 'application/pdf' && (
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={async () => {
+                                  try {
+                                    const token = localStorage.getItem('token');
+                                    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9090/api';
+                                    const response = await fetch(
+                                      `${baseUrl}/files/preview?path=${encodeURIComponent(file.file_path)}`,
+                                      { headers: { 'Authorization': `Bearer ${token}` } }
+                                    );
+                                    
+                                    if (!response.ok) {
+                                      throw new Error('Không thể tải file');
+                                    }
+                                    
+                                    const blob = await response.blob();
+                                    const url = URL.createObjectURL(blob);
+                                    
+                                    // Open in new window for printing
+                                    const printWindow = window.open(url, '_blank');
+                                    
+                                    if (printWindow) {
+                                      printWindow.onload = () => {
+                                        printWindow.focus();
+                                        setTimeout(() => {
+                                          printWindow.print();
+                                        }, 250);
+                                      };
+                                      
+                                      // Cleanup after print dialog closes
+                                      setTimeout(() => {
+                                        URL.revokeObjectURL(url);
+                                      }, 60000);
+                                    } else {
+                                      toast({
+                                        title: 'Lỗi',
+                                        description: 'Vui lòng cho phép popup để in file',
+                                        variant: 'destructive',
+                                      });
+                                      URL.revokeObjectURL(url);
+                                    }
+                                  } catch (error) {
+                                    console.error('Print error:', error);
+                                    toast({
+                                      title: 'Lỗi',
+                                      description: 'Không thể in file',
+                                      variant: 'destructive',
+                                    });
+                                  }
+                                }}
+                                className="flex-shrink-0"
+                                title="In"
+                              >
+                                <Printer className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
