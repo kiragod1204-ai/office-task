@@ -9,18 +9,20 @@ import (
 
 type IncomingDocument struct {
 	gorm.Model
-	ArrivalDate    time.Time `json:"arrival_date" gorm:"not null"`
-	ArrivalNumber  int       `json:"arrival_number" gorm:"unique;not null"`
-	OriginalNumber string    `json:"original_number" gorm:"not null"`
-	DocumentDate   time.Time `json:"document_date" gorm:"not null"`
-	DocumentTypeID uint      `json:"document_type_id" gorm:"not null"`
-	IssuingUnitID  uint      `json:"issuing_unit_id" gorm:"not null"`
-	Summary        string    `json:"summary" gorm:"not null"`
-	InternalNotes  string    `json:"internal_notes"`
-	ProcessorID    *uint     `json:"processor_id"`
-	Status         string    `json:"status" gorm:"not null;default:'received'"`
-	FilePath       string    `json:"file_path"`
-	CreatedByID    uint      `json:"created_by_id" gorm:"not null"`
+	ArrivalDate    time.Time  `json:"arrival_date" gorm:"not null"`
+	ArrivalNumber  int        `json:"arrival_number" gorm:"unique;not null"`
+	OriginalNumber string     `json:"original_number" gorm:"not null"`
+	DocumentDate   time.Time  `json:"document_date" gorm:"not null"`
+	DocumentTypeID uint       `json:"document_type_id" gorm:"not null"`
+	IssuingUnitID  uint       `json:"issuing_unit_id" gorm:"not null"`
+	Summary        string     `json:"summary" gorm:"not null"`
+	InternalNotes  string     `json:"internal_notes"`
+	ProcessorID    *uint      `json:"processor_id"`
+	Status         string     `json:"status" gorm:"not null;default:'received'"`
+	FilePath       string     `json:"file_path"` // Legacy field for backward compatibility
+	CreatedByID    uint       `json:"created_by_id" gorm:"not null"`
+	Priority       string     `json:"priority" gorm:"default:'normal'"` // normal, high, urgent
+	DueDate        *time.Time `json:"due_date"`                         // Expected completion date
 
 	// Relations
 	DocumentType DocumentType `json:"document_type" gorm:"foreignkey:DocumentTypeID"`

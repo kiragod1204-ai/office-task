@@ -161,6 +161,22 @@ export interface ReworkTaskRequest {
   notes?: string
 }
 
+export interface TaskOutgoingDocument {
+  ID: number
+  task_id: number
+  outgoing_document_id: number
+  linked_by_id: number
+  notes: string
+  CreatedAt: string
+  outgoing_document?: {
+    id: number
+    document_number: string
+    summary: string
+    status: string
+    issue_date: string
+  }
+}
+
 export const tasksApi = {
   getTasks: async (): Promise<Task[]> => {
     const response = await apiClient.get('/tasks')
@@ -257,5 +273,20 @@ export const tasksApi = {
   getAvailableReviewers: async (): Promise<{ reviewers: any[]; message: string }> => {
     const response = await apiClient.get('/tasks/reviewers/available')
     return response.data
+  },
+
+  // Outgoing Document Linking
+  linkOutgoingDocument: async (taskId: number, data: { outgoing_document_id: number; notes?: string }): Promise<TaskOutgoingDocument> => {
+    const response = await apiClient.post(`/tasks/${taskId}/outgoing-documents`, data)
+    return response.data
+  },
+
+  unlinkOutgoingDocument: async (taskId: number, outgoingDocId: number): Promise<void> => {
+    await apiClient.delete(`/tasks/${taskId}/outgoing-documents/${outgoingDocId}`)
+  },
+
+  getTaskOutgoingDocuments: async (taskId: number): Promise<TaskOutgoingDocument[]> => {
+    const response = await apiClient.get(`/tasks/${taskId}/outgoing-documents`)
+    return Array.isArray(response.data) ? response.data : []
   }
 }

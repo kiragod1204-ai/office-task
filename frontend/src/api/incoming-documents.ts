@@ -19,11 +19,13 @@ export interface IncomingDocument {
   created_by_id: number;
   document_type: {
     id: number;
+    ID?: number;
     name: string;
     description: string;
   };
   issuing_unit: {
     id: number;
+    ID?: number;
     name: string;
     description: string;
   };

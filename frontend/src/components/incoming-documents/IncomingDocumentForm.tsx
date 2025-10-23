@@ -51,6 +51,22 @@ export const IncomingDocumentForm: React.FC<IncomingDocumentFormProps> = ({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Update form data when document changes
+  useEffect(() => {
+    if (document) {
+      setFormData({
+        arrival_date: document.arrival_date ? document.arrival_date.split('T')[0] : new Date().toISOString().split('T')[0],
+        original_number: document.original_number || '',
+        document_date: document.document_date ? document.document_date.split('T')[0] : '',
+        document_type_id: document.document_type_id || 0,
+        issuing_unit_id: document.issuing_unit_id || 0,
+        summary: document.summary || '',
+        internal_notes: document.internal_notes || '',
+        processor_id: document.processor_id || undefined,
+      });
+    }
+  }, [document]);
+
   // Load processors and files on component mount
   useEffect(() => {
     loadProcessors();

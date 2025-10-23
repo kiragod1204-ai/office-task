@@ -11,7 +11,9 @@ import { CreateTaskPage } from '@/pages/CreateTaskPage'
 import { UserManagementPage as UsersPage } from '@/pages/UserManagementPage'
 import { IncomingFilesPage } from '@/pages/IncomingFilesPage'
 import { IncomingDocumentsPage } from '@/pages/IncomingDocumentsPage'
+import { IncomingDocumentDetailPage } from '@/pages/IncomingDocumentDetailPage'
 import { OutgoingDocumentsPage } from '@/pages/OutgoingDocumentsPage'
+import { OutgoingDocumentDetailPage } from '@/pages/OutgoingDocumentDetailPage'
 import ConfigurationPage from '@/pages/ConfigurationPage'
 import AuditPage from '@/pages/AuditPage'
 import { SessionTimeoutHandler } from '@/components/SessionTimeoutHandler'
@@ -101,10 +103,26 @@ const AppRoutes: React.FC = () => {
         }
       />
       <Route
+        path="/incoming-documents/:id"
+        element={
+          <ProtectedRoute>
+            <IncomingDocumentDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/outgoing-documents"
         element={
           <ProtectedRoute>
             <OutgoingDocumentsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/outgoing-documents/:id"
+        element={
+          <ProtectedRoute>
+            <OutgoingDocumentDetailPage />
           </ProtectedRoute>
         }
       />

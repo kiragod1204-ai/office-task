@@ -1,7 +1,8 @@
 import { apiClient } from './client';
 
 export interface OutgoingDocument {
-  id: number;
+  id: number; // Keep lowercase for compatibility with existing code
+  ID?: number; // Add uppercase for backend compatibility
   document_number: string;
   issue_date: string;
   document_type_id: number;
@@ -17,28 +18,33 @@ export interface OutgoingDocument {
   updated_at: string;
   document_type: {
     id: number;
+    ID?: number;
     name: string;
     description?: string;
   };
   issuing_unit: {
     id: number;
+    ID?: number;
     name: string;
     description?: string;
   };
   drafter: {
     id: number;
+    ID?: number;
     name: string;
     username: string;
     role: string;
   };
   approver: {
     id: number;
+    ID?: number;
     name: string;
     username: string;
     role: string;
   };
   created_by: {
     id: number;
+    ID?: number;
     name: string;
     username: string;
     role: string;
@@ -95,7 +101,8 @@ export interface OutgoingDocumentsResponse {
 }
 
 export interface User {
-  id: number;
+  id: number; // Keep lowercase for compatibility
+  ID?: number; // Add uppercase for backend compatibility
   name: string;
   username: string;
   role: string;

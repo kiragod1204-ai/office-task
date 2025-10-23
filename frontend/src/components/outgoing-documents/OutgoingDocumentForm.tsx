@@ -53,6 +53,7 @@ export const OutgoingDocumentForm: React.FC<OutgoingDocumentFormProps> = ({
           outgoingDocumentApi.getDrafters(),
           outgoingDocumentApi.getApprovers()
         ]);
+        // IDs are now automatically normalized by the API client
         setDrafters(draftersData);
         setApprovers(approversData);
       } catch (error) {
@@ -73,7 +74,7 @@ export const OutgoingDocumentForm: React.FC<OutgoingDocumentFormProps> = ({
     if (document) {
       setFormData({
         document_number: document.document_number,
-        issue_date: document.issue_date,
+        issue_date: document.issue_date ? document.issue_date.split('T')[0] : new Date().toISOString().split('T')[0],
         document_type_id: document.document_type_id,
         issuing_unit_id: document.issuing_unit_id,
         summary: document.summary,

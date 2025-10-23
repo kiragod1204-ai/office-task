@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -9,12 +10,14 @@ import {
   Calendar,
   Building,
   Hash,
-  AlertCircle
+  AlertCircle,
+  ExternalLink
 } from 'lucide-react'
 import apiClient from '@/api/client'
 
 interface TaskDocument {
   ID: number
+  id?: number // Add lowercase for compatibility
   document_number?: string
   arrival_number?: number
   original_number?: string
@@ -22,10 +25,12 @@ interface TaskDocument {
   file_path?: string
   document_type?: {
     ID: number
+    id?: number
     name: string
   }
   issuing_unit?: {
     ID: number
+    id?: number
     name: string
   }
   status?: string
@@ -42,12 +47,15 @@ interface TaskDocuments {
 interface ViewTaskDocumentsProps {
   taskId: number
   className?: string
+  refreshTrigger?: number // Add refresh trigger
 }
 
 export const ViewTaskDocuments: React.FC<ViewTaskDocumentsProps> = ({ 
   taskId, 
-  className = "" 
+  className = "",
+  refreshTrigger = 0
 }) => {
+  const navigate = useNavigate()
   const [documents, setDocuments] = useState<TaskDocuments | null>(null)
   const [loading, setLoading] = useState(true)
   const [downloadingFile, setDownloadingFile] = useState<string | null>(null)
@@ -56,6 +64,7 @@ export const ViewTaskDocuments: React.FC<ViewTaskDocumentsProps> = ({
   useEffect(() => {
     const fetchDocuments = async () => {
       try {
+        setLoading(true)
         const response = await apiClient.get(`/tasks/${taskId}/documents`)
         setDocuments(response.data)
       } catch (error) {
@@ -71,7 +80,7 @@ export const ViewTaskDocuments: React.FC<ViewTaskDocumentsProps> = ({
     }
 
     fetchDocuments()
-  }, [taskId, toast])
+  }, [taskId, refreshTrigger, toast]) // Add refreshTrigger to dependencies
 
   const handleDownloadIncoming = async () => {
     setDownloadingFile('incoming')
@@ -188,12 +197,18 @@ export const ViewTaskDocuments: React.FC<ViewTaskDocumentsProps> = ({
       <CardContent className="space-y-4">
         {/* Incoming Document */}
         {documents?.incoming_document ? (
-          <div className="border border-gray-200 rounded-lg p-4 bg-blue-50/30">
+          <div className="border border-gray-200 rounded-lg p-4 bg-blue-50/30 hover:bg-blue-50/50 transition-colors cursor-pointer group">
             <div className="flex items-start justify-between">
-              <div className="flex-1">
+              <div 
+                className="flex-1"
+                onClick={() => navigate(`/incoming-documents/${documents.incoming_document?.ID}`)}
+              >
                 <div className="flex items-center mb-2">
                   <FileText className="w-4 h-4 mr-2 text-blue-600" />
-                  <h4 className="font-medium text-blue-900">Văn bản đến</h4>
+                  <h4 className="font-medium text-blue-900 group-hover:text-blue-700 flex items-center">
+                    Văn bản đến
+                    <ExternalLink className="w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </h4>
                 </div>
                 
                 <div className="space-y-2">
@@ -239,7 +254,10 @@ export const ViewTaskDocuments: React.FC<ViewTaskDocumentsProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleDownloadIncoming}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownloadIncoming();
+                }}
                 disabled={downloadingFile === 'incoming'}
                 className="ml-4"
               >
@@ -265,14 +283,23 @@ export const ViewTaskDocuments: React.FC<ViewTaskDocumentsProps> = ({
               Văn bản đi ({documents.outgoing_documents.length})
             </h4>
             {documents.outgoing_documents.map((doc, index) => (
-              <div key={doc.ID || index} className="border border-gray-200 rounded-lg p-4 bg-green-50/30">
+              <div 
+                key={doc.ID || index} 
+                className="border border-gray-200 rounded-lg p-4 bg-green-50/30 hover:bg-green-50/50 transition-colors cursor-pointer group"
+              >
                 <div className="flex items-start justify-between">
-                  <div className="flex-1">
+                  <div 
+                    className="flex-1"
+                    onClick={() => navigate(`/outgoing-documents/${doc.ID || doc.id}`)}
+                  >
                     <div className="space-y-2">
                       <div className="flex items-center text-sm">
                         <Hash className="w-3 h-3 mr-1 text-gray-400" />
                         <span className="text-gray-600">Số:</span>
-                        <span className="ml-1 font-medium">{doc.document_number}</span>
+                        <span className="ml-1 font-medium group-hover:text-green-700 flex items-center">
+                          {doc.document_number}
+                          <ExternalLink className="w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </span>
                         {doc.status && (
                           <>
                             <span className="mx-2 text-gray-400">•</span>
@@ -315,7 +342,10 @@ export const ViewTaskDocuments: React.FC<ViewTaskDocumentsProps> = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleDownloadOutgoing(doc.ID)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadOutgoing(doc.ID);
+                    }}
                     disabled={downloadingFile === `outgoing-${doc.ID}`}
                     className="ml-4"
                   >

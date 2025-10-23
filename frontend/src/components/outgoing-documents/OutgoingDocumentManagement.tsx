@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   OutgoingDocument, 
   CreateOutgoingDocumentRequest,
@@ -14,6 +15,7 @@ import { ViewDocumentFiles } from '../common/ViewDocumentFiles';
 type ViewMode = 'list' | 'create' | 'edit' | 'view' | 'approval' | 'upload';
 
 export const OutgoingDocumentManagement: React.FC = () => {
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedDocument, setSelectedDocument] = useState<OutgoingDocument | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -76,15 +78,8 @@ export const OutgoingDocumentManagement: React.FC = () => {
     }
   };
 
-  const handleView = async (document: OutgoingDocument) => {
-    try {
-      const fullDocument = await outgoingDocumentApi.getOutgoingDocument(document.id);
-      setSelectedDocument(fullDocument);
-      setViewMode('view');
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Không thể tải thông tin văn bản';
-      showNotification('error', errorMessage);
-    }
+  const handleView = (document: OutgoingDocument) => {
+    navigate(`/outgoing-documents/${document.id}`);
   };
 
   const handleEdit = async (document: OutgoingDocument) => {
@@ -337,7 +332,7 @@ export const OutgoingDocumentManagement: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-6">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         {/* Notification */}
         {notification && (
           <div className={`fixed top-4 right-4 z-50 p-4 rounded-md shadow-lg ${

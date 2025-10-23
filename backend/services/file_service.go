@@ -102,7 +102,7 @@ func (fs *FileService) ValidateFile(file multipart.File, header *multipart.FileH
 }
 
 // UploadFile handles file upload with enhanced security and organization
-func (fs *FileService) UploadFile(file multipart.File, header *multipart.FileHeader, config FileUploadConfig, userID uint, documentType string, documentID uint) (*FileInfo, error) {
+func (fs *FileService) UploadFile(file multipart.File, header *multipart.FileHeader, config FileUploadConfig, userID uint, documentType string, documentID uint) (*models.File, error) {
 	// Validate file
 	if err := fs.ValidateFile(file, header, config); err != nil {
 		return nil, err
@@ -118,8 +118,8 @@ func (fs *FileService) UploadFile(file multipart.File, header *multipart.FileHea
 	file.Seek(0, 0)
 
 	// Check for duplicate files
-	var existingFile FileInfo
-	if err := database.DB.Where("file_hash = ? AND document_type = ?", fileHash, documentType).First(&existingFile).Error; err == nil {
+	var existingFile models.File
+	if err := database.DB.Where("file_hash = ? AND document_type = ? AND deleted_at IS NULL", fileHash, documentType).First(&existingFile).Error; err == nil {
 		// File already exists, return existing file info
 		return &existingFile, nil
 	}
@@ -166,8 +166,9 @@ func (fs *FileService) UploadFile(file multipart.File, header *multipart.FileHea
 	file.Seek(0, 0)
 	mtype, _ := mimetype.DetectReader(file)
 
-	// Create file record
-	fileRecord := FileInfo{
+	// Create file record using models.File
+	var thumbnailPathPtr *string
+	fileRecord := models.File{
 		OriginalName: header.Filename,
 		FileName:     filename,
 		FilePath:     filePath,
@@ -185,16 +186,17 @@ func (fs *FileService) UploadFile(file multipart.File, header *multipart.FileHea
 	if config.GenerateThumbs && fs.isImageType(mtype.String()) {
 		thumbnailPath, err := fs.generateThumbnail(filePath, uploadsDir)
 		if err == nil {
-			fileRecord.ThumbnailPath = thumbnailPath
+			thumbnailPathPtr = &thumbnailPath
+			fileRecord.ThumbnailPath = thumbnailPathPtr
 		}
 	}
 
-	// Save to database (you'll need to create a files table)
-	if err := database.DB.Table("files").Create(&fileRecord).Error; err != nil {
+	// Save to database
+	if err := database.DB.Create(&fileRecord).Error; err != nil {
 		// Clean up file if database save fails
 		os.Remove(filePath)
-		if fileRecord.ThumbnailPath != "" {
-			os.Remove(fileRecord.ThumbnailPath)
+		if fileRecord.ThumbnailPath != nil && *fileRecord.ThumbnailPath != "" {
+			os.Remove(*fileRecord.ThumbnailPath)
 		}
 		return nil, fmt.Errorf("failed to save file record: %v", err)
 	}
@@ -210,8 +212,8 @@ func (fs *FileService) CheckFileAccess(filePath string, userID uint, userRole st
 	}
 
 	// Get file record from database
-	var fileRecord FileInfo
-	if err := database.DB.Table("files").Where("file_path = ?", filePath).First(&fileRecord).Error; err != nil {
+	var fileRecord models.File
+	if err := database.DB.Where("file_path = ? AND deleted_at IS NULL", filePath).First(&fileRecord).Error; err != nil {
 		return fmt.Errorf("file not found in database")
 	}
 
@@ -245,8 +247,8 @@ func (fs *FileService) DeleteFile(filePath string, userID uint, userRole string)
 	}
 
 	// Get file record
-	var fileRecord FileInfo
-	if err := database.DB.Table("files").Where("file_path = ?", filePath).First(&fileRecord).Error; err != nil {
+	var fileRecord models.File
+	if err := database.DB.Where("file_path = ? AND deleted_at IS NULL", filePath).First(&fileRecord).Error; err != nil {
 		return fmt.Errorf("file not found")
 	}
 
@@ -255,12 +257,12 @@ func (fs *FileService) DeleteFile(filePath string, userID uint, userRole string)
 		return fmt.Errorf("failed to remove file: %v", err)
 	}
 
-	if fileRecord.ThumbnailPath != "" {
-		os.Remove(fileRecord.ThumbnailPath) // Ignore errors for thumbnail
+	if fileRecord.ThumbnailPath != nil && *fileRecord.ThumbnailPath != "" {
+		os.Remove(*fileRecord.ThumbnailPath) // Ignore errors for thumbnail
 	}
 
-	// Remove database record
-	if err := database.DB.Table("files").Delete(&fileRecord).Error; err != nil {
+	// Soft delete database record
+	if err := database.DB.Delete(&fileRecord).Error; err != nil {
 		return fmt.Errorf("failed to remove file record: %v", err)
 	}
 

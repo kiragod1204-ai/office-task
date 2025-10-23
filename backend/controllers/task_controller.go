@@ -27,6 +27,17 @@ func createTaskStatusHistory(taskID uint, oldStatus, newStatus string, changedBy
 	return database.DB.Create(&history).Error
 }
 
+// Helper function to ensure CreatedBy is loaded for a task
+func ensureTaskCreatorLoaded(task *models.Task) {
+	if task.CreatedBy == nil && task.CreatedByID > 0 {
+		var creator models.User
+		if err := database.DB.First(&creator, task.CreatedByID).Error; err == nil {
+			task.CreatedBy = &creator
+			task.Creator = &creator // Also set Creator for compatibility
+		}
+	}
+}
+
 type CreateTaskRequest struct {
 	Description        string `json:"description" binding:"required"`
 	Deadline           string `json:"deadline"`
@@ -116,7 +127,10 @@ func CreateTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, "", models.StatusNotStarted, userID.(uint), "Tạo công việc mới")
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	// Ensure CreatedBy is loaded
+	ensureTaskCreatorLoaded(&task)
 
 	c.JSON(http.StatusCreated, task)
 }
@@ -281,7 +295,10 @@ func ChooseReviewer(c *gin.Context) {
 	createTaskStatusHistory(task.ID, oldStatus, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	// Ensure CreatedBy is loaded
+	ensureTaskCreatorLoaded(&task)
 
 	c.JSON(http.StatusOK, gin.H{
 		"task":     task,
@@ -359,7 +376,10 @@ func ReworkTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, oldStatus, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	// Ensure CreatedBy is loaded
+	ensureTaskCreatorLoaded(&task)
 
 	c.JSON(http.StatusOK, gin.H{
 		"task":    task,
@@ -480,7 +500,10 @@ func SubmitForReview(c *gin.Context) {
 	createTaskStatusHistory(task.ID, oldStatus, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	// Ensure CreatedBy is loaded
+	ensureTaskCreatorLoaded(&task)
 
 	c.JSON(http.StatusOK, gin.H{
 		"task":     task,
@@ -497,16 +520,26 @@ func GetTask(c *gin.Context) {
 	}
 
 	var task models.Task
-	if err := database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("Comments.User").Preload("StatusHistory.ChangedBy").First(&task, id).Error; err != nil {
+	if err := database.DB.
+		Preload("AssignedTo").
+		Preload("AssignedUser").
+		Preload("IncomingDocument.DocumentType").
+		Preload("IncomingDocument.IssuingUnit").
+		Preload("IncomingFile.DocumentType").
+		Preload("IncomingFile.IssuingUnit").
+		Preload("Comments.User").
+		Preload("StatusHistory.ChangedBy").
+		First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy công việc"})
 		return
 	}
 
-	// Manually load CreatedBy if preload didn't work
-	if task.CreatedBy == nil && task.CreatedByID > 0 {
+	// Manually load CreatedBy - GORM preload sometimes fails with this
+	if task.CreatedByID > 0 {
 		var creator models.User
 		if err := database.DB.First(&creator, task.CreatedByID).Error; err == nil {
 			task.CreatedBy = &creator
+			task.Creator = &creator // Also set Creator for compatibility
 		}
 	}
 
@@ -519,11 +552,6 @@ func GetTask(c *gin.Context) {
 	taskWithTime := TaskWithRemainingTime{
 		Task:          task,
 		RemainingTime: task.GetRemainingTime(),
-	}
-
-	// Populate Creator field for compatibility
-	if taskWithTime.CreatedBy != nil {
-		taskWithTime.Creator = taskWithTime.CreatedBy
 	}
 
 	c.JSON(http.StatusOK, taskWithTime)
@@ -569,7 +597,16 @@ func AssignTask(c *gin.Context) {
 	}
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("IncomingFile.DocumentType").Preload("IncomingFile.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	// Manually load CreatedBy
+	if task.CreatedByID > 0 {
+		var creator models.User
+		if err := database.DB.First(&creator, task.CreatedByID).Error; err == nil {
+			task.CreatedBy = &creator
+			task.Creator = &creator
+		}
+	}
 
 	c.JSON(http.StatusOK, task)
 }
@@ -768,7 +805,10 @@ func UpdateTaskStatus(c *gin.Context) {
 	createTaskStatusHistory(task.ID, oldStatus, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	// Ensure CreatedBy is loaded
+	ensureTaskCreatorLoaded(&task)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -880,7 +920,10 @@ func UpdateTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, task.Status, task.Status, userID.(uint), "Cập nhật thông tin công việc")
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	// Ensure CreatedBy is loaded
+	ensureTaskCreatorLoaded(&task)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -1015,7 +1058,10 @@ func ForwardTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, task.Status, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	// Ensure CreatedBy is loaded
+	ensureTaskCreatorLoaded(&task)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -1098,7 +1144,10 @@ func DelegateTask(c *gin.Context) {
 	createTaskStatusHistory(task.ID, task.Status, task.Status, userID.(uint), notes)
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	// Ensure CreatedBy is loaded
+	ensureTaskCreatorLoaded(&task)
 
 	c.JSON(http.StatusOK, task)
 }
@@ -1143,7 +1192,10 @@ func UpdateProcessingContent(c *gin.Context) {
 	createTaskStatusHistory(task.ID, task.Status, task.Status, userID.(uint), "Cập nhật nội dung xử lý công việc")
 
 	// Load relations
-	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("CreatedBy").Preload("Creator").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+	database.DB.Preload("AssignedTo").Preload("AssignedUser").Preload("IncomingDocument.DocumentType").Preload("IncomingDocument.IssuingUnit").Preload("StatusHistory.ChangedBy").First(&task, task.ID)
+
+	// Ensure CreatedBy is loaded
+	ensureTaskCreatorLoaded(&task)
 
 	c.JSON(http.StatusOK, task)
 }

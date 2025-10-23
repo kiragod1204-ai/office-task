@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { deepNormalizeIds } from '@/lib/normalize-api'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9090/api'
 
@@ -23,9 +24,15 @@ apiClient.interceptors.request.use(
   }
 )
 
-// Response interceptor to handle auth errors
+// Response interceptor to handle auth errors and normalize IDs
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Normalize all ID fields in the response
+    if (response.data && typeof response.data === 'object') {
+      response.data = deepNormalizeIds(response.data)
+    }
+    return response
+  },
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token')

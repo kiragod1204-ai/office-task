@@ -20,6 +20,7 @@ export interface IssuingUnit {
 
 export interface ReceivingUnit {
   id: number;
+  ID?: number; // Add uppercase for backend compatibility
   name: string;
   description: string;
   is_active: boolean;

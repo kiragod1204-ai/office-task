@@ -308,19 +308,19 @@ func GetFileThumbnail(c *gin.Context) {
 	}
 
 	// Get file record to find thumbnail
-	var fileRecord services.FileInfo
-	if err := database.DB.Table("files").Where("file_path = ?", filePath).First(&fileRecord).Error; err != nil {
+	var fileRecord models.File
+	if err := database.DB.Where("file_path = ? AND deleted_at IS NULL", filePath).First(&fileRecord).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File không tồn tại"})
 		return
 	}
 
-	if fileRecord.ThumbnailPath == "" {
+	if fileRecord.ThumbnailPath == nil || *fileRecord.ThumbnailPath == "" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Thumbnail không tồn tại"})
 		return
 	}
 
 	// Serve thumbnail
-	osFilePath := filepath.FromSlash(fileRecord.ThumbnailPath)
+	osFilePath := filepath.FromSlash(*fileRecord.ThumbnailPath)
 	if _, err := os.Stat(osFilePath); os.IsNotExist(err) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Thumbnail không tồn tại"})
 		return
@@ -355,8 +355,8 @@ func GetFileInfo(c *gin.Context) {
 	}
 
 	// Get file record
-	var fileRecord services.FileInfo
-	if err := database.DB.Table("files").Where("file_path = ?", filePath).First(&fileRecord).Error; err != nil {
+	var fileRecord models.File
+	if err := database.DB.Where("file_path = ? AND deleted_at IS NULL", filePath).First(&fileRecord).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File không tồn tại"})
 		return
 	}
@@ -417,8 +417,8 @@ func GetFilesByDocument(c *gin.Context) {
 	userRole, _ := c.Get("user_role")
 
 	// Get files for document
-	var files []services.FileInfo
-	query := database.DB.Table("files").Where("document_type = ? AND document_id = ? AND deleted_at IS NULL", documentType, documentID)
+	var files []models.File
+	query := database.DB.Where("document_type = ? AND document_id = ? AND deleted_at IS NULL", documentType, documentID)
 
 	// Apply access control
 	if userRole.(string) != models.RoleAdmin {
@@ -485,8 +485,8 @@ func GetFileVersions(c *gin.Context) {
 	}
 
 	// Get file versions (simplified - in real implementation, you'd track versions)
-	var files []services.FileInfo
-	query := database.DB.Table("files").Where("document_type = ? AND document_id = ? AND deleted_at IS NULL", documentType, documentID)
+	var files []models.File
+	query := database.DB.Where("document_type = ? AND document_id = ? AND deleted_at IS NULL", documentType, documentID)
 
 	if err := query.Order("uploaded_at DESC").Find(&files).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể lấy lịch sử phiên bản"})
@@ -516,8 +516,8 @@ func GetFileVersions(c *gin.Context) {
 
 // GetAllFiles returns all files with filtering (admin only)
 func GetAllFiles(c *gin.Context) {
-	var files []services.FileInfo
-	query := database.DB.Table("files").Where("deleted_at IS NULL")
+	var files []models.File
+	query := database.DB.Where("deleted_at IS NULL")
 
 	// Apply filters
 	if documentType := c.Query("documentType"); documentType != "" {
@@ -560,8 +560,8 @@ func GetFileStats(c *gin.Context) {
 	}
 
 	// Get total files and size
-	database.DB.Table("files").Where("deleted_at IS NULL").Count(&stats.TotalFiles)
-	database.DB.Table("files").Where("deleted_at IS NULL").Select("COALESCE(SUM(file_size), 0)").Row().Scan(&stats.TotalSize)
+	database.DB.Model(&models.File{}).Where("deleted_at IS NULL").Count(&stats.TotalFiles)
+	database.DB.Model(&models.File{}).Where("deleted_at IS NULL").Select("COALESCE(SUM(file_size), 0)").Row().Scan(&stats.TotalSize)
 
 	// Get stats by document type
 	var typeStats []struct {
@@ -569,7 +569,7 @@ func GetFileStats(c *gin.Context) {
 		Count        int64  `json:"count"`
 		Size         int64  `json:"size"`
 	}
-	database.DB.Table("files").
+	database.DB.Model(&models.File{}).
 		Select("document_type, COUNT(*) as count, COALESCE(SUM(file_size), 0) as size").
 		Where("deleted_at IS NULL").
 		Group("document_type").
@@ -606,7 +606,7 @@ func UpdateFileAccess(c *gin.Context) {
 	}
 
 	// Update file access level
-	result := database.DB.Table("files").
+	result := database.DB.Model(&models.File{}).
 		Where("file_path = ? AND deleted_at IS NULL", request.FilePath).
 		Update("access_level", request.AccessLevel)
 
@@ -667,6 +667,62 @@ func BulkDeleteFiles(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// PreviewFile serves file for inline preview (especially PDFs)
+func PreviewFile(c *gin.Context) {
+	filePath := c.Query("path")
+	if filePath == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Thiếu đường dẫn file"})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	userRole, _ := c.Get("user_role")
+
+	// Initialize file service
+	fileService := services.NewFileService()
+
+	// Check file access
+	if err := fileService.CheckFileAccess(filePath, userID.(uint), userRole.(string)); err != nil {
+		// Log the actual error for debugging
+		fmt.Printf("File access denied for user %d (role: %s) to file %s: %v\n", userID.(uint), userRole.(string), filePath, err)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Không có quyền truy cập file", "detail": err.Error()})
+		return
+	}
+
+	// Get file record to get mime type
+	var fileRecord models.File
+	if err := database.DB.Where("file_path = ? AND deleted_at IS NULL", filePath).First(&fileRecord).Error; err != nil {
+		fmt.Printf("File record not found in database: %s, error: %v\n", filePath, err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "File không tồn tại trong cơ sở dữ liệu"})
+		return
+	}
+
+	// Normalize path separators
+	filePath = strings.ReplaceAll(filePath, "\\", "/")
+	osFilePath := filepath.FromSlash(filePath)
+
+	// Check if file exists
+	if _, err := os.Stat(osFilePath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File không tồn tại"})
+		return
+	}
+
+	// Set headers for inline preview
+	c.Header("Content-Type", fileRecord.MimeType)
+	c.Header("Content-Disposition", "inline; filename="+fileRecord.OriginalName)
+
+	// Enable CORS for preview
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Access-Control-Allow-Methods", "GET")
+
+	c.File(osFilePath)
 }
 
 // Utility function

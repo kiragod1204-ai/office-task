@@ -577,3 +577,165 @@ func GetProcessors(c *gin.Context) {
 
 	c.JSON(http.StatusOK, users)
 }
+
+// GetIncomingDocumentFiles retrieves all files for an incoming document
+func GetIncomingDocumentFiles(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID không hợp lệ"})
+		return
+	}
+
+	// Verify document exists
+	var document models.IncomingDocument
+	if err := database.DB.First(&document, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy văn bản đến"})
+		return
+	}
+
+	documentService := services.NewDocumentService()
+	files, err := documentService.GetDocumentFiles("incoming", uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể lấy danh sách file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"document_id": id,
+		"files":       files,
+		"total":       len(files),
+	})
+}
+
+// CreateTaskFromIncomingDocument creates a new task linked to an incoming document
+func CreateTaskFromIncomingDocument(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID không hợp lệ"})
+		return
+	}
+
+	// Verify document exists
+	var document models.IncomingDocument
+	if err := database.DB.First(&document, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy văn bản đến"})
+		return
+	}
+
+	type CreateTaskFromDocumentRequest struct {
+		Description       string `json:"description" binding:"required"`
+		Deadline          string `json:"deadline"`
+		DeadlineType      string `json:"deadline_type"`
+		AssignedTo        uint   `json:"assigned_to" binding:"required"`
+		ProcessingContent string `json:"processing_content"`
+		ProcessingNotes   string `json:"processing_notes"`
+	}
+
+	var req CreateTaskFromDocumentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	documentID := uint(id)
+
+	task := models.Task{
+		Description:        req.Description,
+		Status:             models.StatusNotStarted,
+		AssignedToID:       &req.AssignedTo,
+		CreatedByID:        userID.(uint),
+		IncomingDocumentID: &documentID,
+		TaskType:           models.TaskTypeDocumentLinked,
+		DeadlineType:       req.DeadlineType,
+		ProcessingContent:  req.ProcessingContent,
+		ProcessingNotes:    req.ProcessingNotes,
+	}
+
+	// Parse deadline if provided
+	if req.Deadline != "" {
+		var deadline time.Time
+		formats := []string{
+			time.RFC3339,
+			"2006-01-02T15:04:05Z",
+			"2006-01-02T15:04:05",
+			"2006-01-02 15:04:05",
+			"2006-01-02",
+		}
+
+		for _, format := range formats {
+			deadline, err = time.Parse(format, req.Deadline)
+			if err == nil {
+				break
+			}
+		}
+
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Định dạng thời gian không hợp lệ"})
+			return
+		}
+
+		task.Deadline = &deadline
+	}
+
+	if err := database.DB.Create(&task).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể tạo công việc"})
+		return
+	}
+
+	// Load relations
+	database.DB.Preload("AssignedTo").Preload("CreatedBy").Preload("IncomingDocument").First(&task, task.ID)
+
+	c.JSON(http.StatusCreated, gin.H{
+		"task":    task,
+		"message": "Tạo công việc từ văn bản đến thành công",
+	})
+}
+
+// GetIncomingDocumentTasks retrieves all tasks linked to an incoming document
+func GetIncomingDocumentTasks(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID không hợp lệ"})
+		return
+	}
+
+	// Verify document exists
+	var document models.IncomingDocument
+	if err := database.DB.First(&document, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy văn bản đến"})
+		return
+	}
+
+	var tasks []models.Task
+	if err := database.DB.
+		Preload("AssignedTo").
+		Preload("CreatedBy").
+		Preload("StatusHistory.ChangedBy").
+		Where("incoming_document_id = ?", id).
+		Order("created_at DESC").
+		Find(&tasks).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể lấy danh sách công việc"})
+		return
+	}
+
+	// Add remaining time information
+	type TaskWithRemainingTime struct {
+		models.Task
+		RemainingTime models.RemainingTimeInfo `json:"remaining_time"`
+	}
+
+	var tasksWithTime []TaskWithRemainingTime
+	for _, task := range tasks {
+		tasksWithTime = append(tasksWithTime, TaskWithRemainingTime{
+			Task:          task,
+			RemainingTime: task.GetRemainingTime(),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"document_id": id,
+		"tasks":       tasksWithTime,
+		"total":       len(tasksWithTime),
+	})
+}

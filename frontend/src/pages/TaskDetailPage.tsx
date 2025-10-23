@@ -33,6 +33,7 @@ import { usersApi, User as UserType } from '@/api/users'
 import { TaskManagementActions } from '@/components/TaskManagementActions'
 import { TaskStatusHistory } from '@/components/tasks/TaskStatusHistory'
 import { ViewTaskDocuments } from '@/components/common/ViewTaskDocuments'
+import { LinkOutgoingDocumentDialog } from '@/components/tasks/LinkOutgoingDocumentDialog'
 
 export const TaskDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -53,6 +54,8 @@ export const TaskDetailPage: React.FC = () => {
   const [downloadingFile, setDownloadingFile] = useState<string | null>(null)
   const [workflow, setWorkflow] = useState<any>(null)
   const [workflowLoading, setWorkflowLoading] = useState(false)
+  const [linkDocDialogOpen, setLinkDocDialogOpen] = useState(false)
+  const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0)
 
   useEffect(() => {
     const fetchTaskDetails = async () => {
@@ -416,7 +419,7 @@ export const TaskDetailPage: React.FC = () => {
           )}
 
           {/* Task Documents */}
-          <ViewTaskDocuments taskId={task.ID} />
+          <ViewTaskDocuments taskId={task.ID} refreshTrigger={documentsRefreshTrigger} />
 
           {/* Report File */}
           <Card>
@@ -603,6 +606,18 @@ export const TaskDetailPage: React.FC = () => {
                 </div>
               )}
 
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm">Văn bản liên quan</h4>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => setLinkDocDialogOpen(true)}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Liên kết văn bản đi
+                </Button>
+              </div>
+
               <TaskManagementActions
                 task={task}
                 onTaskUpdate={setTask}
@@ -764,6 +779,18 @@ export const TaskDetailPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Link Outgoing Document Dialog */}
+      <LinkOutgoingDocumentDialog
+        taskId={task.ID}
+        isOpen={linkDocDialogOpen}
+        onClose={() => setLinkDocDialogOpen(false)}
+        onSuccess={() => {
+          // Refresh task data and documents to show updated linked documents
+          tasksApi.getTask(task.ID).then(setTask);
+          setDocumentsRefreshTrigger(prev => prev + 1);
+        }}
+      />
     </div>
   )
 }

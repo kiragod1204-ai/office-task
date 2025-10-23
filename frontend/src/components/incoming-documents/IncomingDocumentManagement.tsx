@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { IncomingDocumentForm } from './IncomingDocumentForm';
@@ -18,10 +19,10 @@ import { useAuth } from '../../context/AuthContext';
 export const IncomingDocumentManagement: React.FC = () => {
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [showViewDialog, setShowViewDialog] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<IncomingDocument | null>(null);
   const [loading, setLoading] = useState(false);
@@ -123,8 +124,7 @@ export const IncomingDocumentManagement: React.FC = () => {
   };
 
   const handleViewDocument = (document: IncomingDocument) => {
-    setSelectedDocument(document);
-    setShowViewDialog(true);
+    navigate(`/incoming-documents/${document.ID}`);
   };
 
   const handleEditDocument = (document: IncomingDocument) => {
@@ -223,84 +223,6 @@ export const IncomingDocumentManagement: React.FC = () => {
               onCancel={() => setShowEditDialog(false)}
               isLoading={loading}
             />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* View Document Dialog */}
-      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Chi tiết văn bản đến</DialogTitle>
-          </DialogHeader>
-          {selectedDocument && (
-            <div className="space-y-6">
-              {/* Document Details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Số đến</label>
-                  <p className="text-lg font-semibold">{selectedDocument.arrival_number}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Số văn bản gốc</label>
-                  <p className="text-lg">{selectedDocument.original_number}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Ngày đến</label>
-                  <p>{new Date(selectedDocument.arrival_date).toLocaleDateString('vi-VN')}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Ngày văn bản</label>
-                  <p>{new Date(selectedDocument.document_date).toLocaleDateString('vi-VN')}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Loại văn bản</label>
-                  <p>{selectedDocument.document_type.name}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Đơn vị ban hành</label>
-                  <p>{selectedDocument.issuing_unit.name}</p>
-                </div>
-                {selectedDocument.processor && (
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Người xử lý</label>
-                    <p>{selectedDocument.processor.name} ({selectedDocument.processor.role})</p>
-                  </div>
-                )}
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Người tạo</label>
-                  <p>{selectedDocument.created_by.name}</p>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Trích yếu</label>
-                <p className="mt-1 p-3 bg-muted rounded">{selectedDocument.summary}</p>
-              </div>
-
-              {selectedDocument.internal_notes && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Ghi chú nội bộ</label>
-                  <p className="mt-1 p-3 bg-muted rounded">{selectedDocument.internal_notes}</p>
-                </div>
-              )}
-
-              {/* File Management Section */}
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Files đính kèm</label>
-                <ViewDocumentFiles 
-                  documentType="incoming"
-                  documentId={selectedDocument.ID}
-                  onDownload={handleFileDownload}
-                />
-              </div>
-
-              <div className="flex justify-end">
-                <Button onClick={() => setShowViewDialog(false)}>
-                  Đóng
-                </Button>
-              </div>
-            </div>
           )}
         </DialogContent>
       </Dialog>

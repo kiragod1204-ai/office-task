@@ -295,7 +295,7 @@ export const IncomingDocumentList: React.FC<IncomingDocumentListProps> = ({
         </Card>
       )}
 
-      {/* Document List */}
+      {/* Document List - Table Layout */}
       <Card>
         <CardContent className="p-0">
           {loading ? (
@@ -307,143 +307,178 @@ export const IncomingDocumentList: React.FC<IncomingDocumentListProps> = ({
               Không tìm thấy văn bản đến nào
             </div>
           ) : (
-            <div className="divide-y">
-              {documents.map((document) => (
-                <div key={document.ID} className="p-6 hover:bg-muted/50 transition-colors">
-                  <div className="flex justify-between items-start gap-4">
-                    <div className="flex-1 space-y-3">
-                      {/* Header */}
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <Badge variant={getStatusBadgeVariant(document.status)}>
-                          {INCOMING_DOCUMENT_STATUS_LABELS[document.status as keyof typeof INCOMING_DOCUMENT_STATUS_LABELS]}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">
-                          Số đến: {document.arrival_number}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          Số gốc: {document.original_number}
-                        </span>
-                      </div>
-
-                      {/* Summary */}
-                      <h3 className="font-semibold text-lg leading-tight">
-                        {document.summary}
-                      </h3>
-
-                      {/* Details */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />
-                          <span>
-                            Ngày đến: {format(new Date(document.arrival_date), 'dd/MM/yyyy', { locale: vi })}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-muted/50 border-b">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Số đến
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Số gốc
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Ngày đến
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Loại VB
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Trích yếu
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Đơn vị BH
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Người xử lý
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Công việc
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Trạng thái
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Thao tác
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {documents.map((document) => (
+                    <tr 
+                      key={document.ID} 
+                      className="hover:bg-muted/30 transition-colors cursor-pointer"
+                      onClick={() => onView && onView(document)}
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-primary">
+                        {document.arrival_number}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
+                        {document.original_number}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-muted-foreground" />
+                          {format(new Date(document.arrival_date), 'dd/MM/yyyy')}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        {document.document_type.name}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="truncate max-w-md" title={document.summary}>
+                          {document.summary}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex items-center gap-1">
+                          <Building className="w-3 h-3 text-muted-foreground" />
+                          <span className="truncate max-w-[200px]" title={document.issuing_unit.name}>
+                            {document.issuing_unit.name}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4" />
-                          <span>
-                            Ngày VB: {format(new Date(document.document_date), 'dd/MM/yyyy', { locale: vi })}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Building className="w-4 h-4" />
-                          <span>{document.issuing_unit.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4" />
-                          <span>{document.document_type.name}</span>
-                        </div>
-                        {document.processor && (
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4" />
-                            <span>Người xử lý: {document.processor.name}</span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        {document.processor ? (
+                          <div className="flex items-center gap-1">
+                            <User className="w-3 h-3 text-muted-foreground" />
+                            {document.processor.name}
                           </div>
+                        ) : (
+                          <span className="text-muted-foreground italic">Chưa gán</span>
                         )}
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4" />
-                          <span>Tạo bởi: {document.created_by.name}</span>
-                        </div>
-                      </div>
-
-                      {/* Internal Notes */}
-                      {document.internal_notes && (
-                        <div className="text-sm text-muted-foreground bg-muted p-3 rounded">
-                          <strong>Ghi chú:</strong> {document.internal_notes}
-                        </div>
-                      )}
-
-                      {/* Tasks */}
-                      {document.tasks && document.tasks.length > 0 && (
-                        <div className="text-sm">
-                          <strong>Công việc liên quan:</strong>
-                          <div className="mt-1 space-y-1">
-                            {document.tasks.map((task) => (
-                              <div key={task.ID} className="flex items-center gap-2 text-muted-foreground">
-                                <span>• {task.description}</span>
-                                {task.assigned_to && (
-                                  <span className="text-xs">({task.assigned_to.name})</span>
-                                )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        {document.tasks && document.tasks.length > 0 ? (
+                          <div className="space-y-1">
+                            <Badge variant="outline" className="text-xs font-semibold">
+                              {document.tasks.length} CV
+                            </Badge>
+                            {document.tasks.slice(0, 2).map((task) => (
+                              <div key={task.ID} className="text-xs text-muted-foreground truncate max-w-[150px]" title={task.description}>
+                                • {task.description}
                               </div>
                             ))}
+                            {document.tasks.length > 2 && (
+                              <div className="text-xs text-muted-foreground italic">
+                                +{document.tasks.length - 2} khác
+                              </div>
+                            )}
                           </div>
+                        ) : (
+                          <span className="text-muted-foreground italic text-xs">Chưa có CV</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <Badge variant={getStatusBadgeVariant(document.status)} className="text-xs">
+                          {INCOMING_DOCUMENT_STATUS_LABELS[document.status as keyof typeof INCOMING_DOCUMENT_STATUS_LABELS]}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {onView && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onView(document)}
+                              title="Xem chi tiết"
+                              className="h-8 w-8 p-0"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          )}
+                          
+                          {onEdit && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onEdit(document)}
+                              title="Chỉnh sửa"
+                              className="h-8 w-8 p-0"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          )}
+
+                          {onAssignProcessor && !document.processor_id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onAssignProcessor(document)}
+                              title="Gán người xử lý"
+                              className="h-8 w-8 p-0"
+                            >
+                              <UserCheck className="w-4 h-4" />
+                            </Button>
+                          )}
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDownloadFiles(document)}
+                            title="Tải xuống files"
+                            className="h-8 w-8 p-0"
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+
+                          {onDelete && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onDelete(document)}
+                              title="Xóa"
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex flex-col gap-2">
-                      {onView && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onView(document)}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      )}
-                      
-                      {onEdit && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onEdit(document)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                      )}
-
-                      {onAssignProcessor && !document.processor_id && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onAssignProcessor(document)}
-                        >
-                          <UserCheck className="w-4 h-4" />
-                        </Button>
-                      )}
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDownloadFiles(document)}
-                        title="Tải xuống files"
-                      >
-                        <Download className="w-4 h-4" />
-                      </Button>
-
-                      {onDelete && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onDelete(document)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>

@@ -86,6 +86,7 @@ func main() {
 		// Enhanced File routes
 		api.POST("/files/upload", controllers.EnhancedUploadFile)
 		api.GET("/files/download", controllers.EnhancedDownloadFile)
+		api.GET("/files/preview", controllers.PreviewFile)
 		api.GET("/files/thumbnail", controllers.GetFileThumbnail)
 		api.GET("/files/info", controllers.GetFileInfo)
 		api.DELETE("/files/delete", controllers.DeleteFile)
@@ -156,6 +157,9 @@ func main() {
 		api.POST("/incoming-documents/:id/assign", middleware.RequireRole(models.RoleSecretary, models.RoleTeamLeader, models.RoleDeputy, models.RoleAdmin), controllers.AssignProcessor)
 		api.POST("/incoming-documents/:id/upload", middleware.RequireRole(models.RoleSecretary, models.RoleAdmin), controllers.UploadIncomingDocumentFile)
 		api.GET("/incoming-documents/processors", controllers.GetProcessors)
+		api.GET("/incoming-documents/:id/files", controllers.GetIncomingDocumentFiles)
+		api.GET("/incoming-documents/:id/tasks", controllers.GetIncomingDocumentTasks)
+		api.POST("/incoming-documents/:id/tasks", middleware.RequireRole(models.RoleSecretary, models.RoleTeamLeader, models.RoleDeputy, models.RoleAdmin), controllers.CreateTaskFromIncomingDocument)
 
 		// Outgoing Document routes
 		api.GET("/outgoing-documents", controllers.GetOutgoingDocuments)
@@ -167,6 +171,8 @@ func main() {
 		api.POST("/outgoing-documents/:id/upload", middleware.RequireRole(models.RoleSecretary, models.RoleTeamLeader, models.RoleDeputy, models.RoleOfficer, models.RoleAdmin), controllers.UploadOutgoingDocumentFile)
 		api.GET("/outgoing-documents/drafters", controllers.GetDrafters)
 		api.GET("/outgoing-documents/approvers", controllers.GetApprovers)
+		api.GET("/outgoing-documents/:id/files", controllers.GetOutgoingDocumentFiles)
+		api.GET("/outgoing-documents/:id/tasks", controllers.GetOutgoingDocumentTasks)
 
 		// Filter and Search routes
 		api.GET("/filters/presets", controllers.GetFilterPresets)

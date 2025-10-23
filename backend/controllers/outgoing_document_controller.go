@@ -485,6 +485,85 @@ func GetApprovers(c *gin.Context) {
 	c.JSON(http.StatusOK, users)
 }
 
+// GetOutgoingDocumentFiles retrieves all files for an outgoing document
+func GetOutgoingDocumentFiles(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID không hợp lệ"})
+		return
+	}
+
+	// Verify document exists
+	var document models.OutgoingDocument
+	if err := database.DB.First(&document, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy văn bản đi"})
+		return
+	}
+
+	documentService := services.NewDocumentService()
+	files, err := documentService.GetDocumentFiles("outgoing", uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể lấy danh sách file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"document_id": id,
+		"files":       files,
+		"total":       len(files),
+	})
+}
+
+// GetOutgoingDocumentTasks retrieves all tasks linked to an outgoing document
+func GetOutgoingDocumentTasks(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID không hợp lệ"})
+		return
+	}
+
+	// Verify document exists
+	var document models.OutgoingDocument
+	if err := database.DB.First(&document, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy văn bản đi"})
+		return
+	}
+
+	// Get linked tasks through TaskOutgoingDocument relationship
+	var linkedTasks []models.TaskOutgoingDocument
+	if err := database.DB.
+		Preload("Task.AssignedTo").
+		Preload("Task.CreatedBy").
+		Preload("Task.StatusHistory.ChangedBy").
+		Where("outgoing_document_id = ?", id).
+		Find(&linkedTasks).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể lấy danh sách công việc"})
+		return
+	}
+
+	// Extract tasks with remaining time
+	type TaskWithRemainingTime struct {
+		models.Task
+		RemainingTime models.RemainingTimeInfo `json:"remaining_time"`
+		LinkedAt      time.Time                `json:"linked_at"`
+	}
+
+	var tasksWithTime []TaskWithRemainingTime
+	for _, linked := range linkedTasks {
+		tasksWithTime = append(tasksWithTime, TaskWithRemainingTime{
+			Task:          linked.Task,
+			RemainingTime: linked.Task.GetRemainingTime(),
+			LinkedAt:      linked.CreatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"document_id": id,
+		"tasks":       tasksWithTime,
+		"total":       len(tasksWithTime),
+	})
+}
+
 // Helper function to check if a role can be a drafter
 func isDrafterRole(role string) bool {
 	return role == models.RoleTeamLeader || role == models.RoleDeputy || role == models.RoleOfficer
