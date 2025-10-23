@@ -400,7 +400,10 @@ export const OutgoingDocumentList: React.FC<OutgoingDocumentListProps> = ({
                         </button>
                       )}
                       <button
-                        onClick={() => handleDownloadFile(document)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownloadFile(document);
+                        }}
                         className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors"
                         title="Tải xuống"
                       >

@@ -453,7 +453,10 @@ export const IncomingDocumentList: React.FC<IncomingDocumentListProps> = ({
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDownloadFiles(document)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadFiles(document);
+                            }}
                             title="Tải xuống files"
                             className="h-8 w-8 p-0"
                           >

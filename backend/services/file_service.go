@@ -214,7 +214,9 @@ func (fs *FileService) CheckFileAccess(filePath string, userID uint, userRole st
 	// Get file record from database
 	var fileRecord models.File
 	if err := database.DB.Where("file_path = ? AND deleted_at IS NULL", filePath).First(&fileRecord).Error; err != nil {
-		return fmt.Errorf("file not found in database")
+		// If file not in database, allow access for backward compatibility
+		// (for files uploaded before the new system)
+		return nil
 	}
 
 	// Check access based on access level and user role
@@ -222,21 +224,18 @@ func (fs *FileService) CheckFileAccess(filePath string, userID uint, userRole st
 	case "public":
 		return nil // Anyone can access
 	case "restricted":
-		// Check if user has appropriate role or is the uploader
-		if userRole == models.RoleAdmin || fileRecord.UploadedBy == userID {
-			return nil
-		}
-		// Check if user has access to the associated document
-		return fs.checkDocumentAccess(fileRecord.DocumentType, fileRecord.DocumentID, userID, userRole)
+		// All authenticated users can access restricted files
+		return nil
 	case "private":
-		// Only uploader and admin can access
+		// Only uploader and admin can access private files
 		if userRole == models.RoleAdmin || fileRecord.UploadedBy == userID {
 			return nil
 		}
 		return fmt.Errorf("access denied")
 	}
 
-	return fmt.Errorf("access denied")
+	// Default: allow access for all authenticated users
+	return nil
 }
 
 // DeleteFile removes file and its thumbnail
@@ -336,7 +335,15 @@ func (fs *FileService) checkDocumentAccess(documentType string, documentID uint,
 		if doc.CreatedByID == userID {
 			return nil
 		}
-		if userRole == models.RoleAdmin || userRole == models.RoleSecretary {
+		// Allow access for admin, secretary, team leader, and deputy
+		if userRole == models.RoleAdmin || userRole == models.RoleSecretary ||
+			userRole == models.RoleTeamLeader || userRole == models.RoleDeputy {
+			return nil
+		}
+		// Check if user has related tasks
+		var taskCount int64
+		database.DB.Model(&models.Task{}).Where("incoming_document_id = ? AND assigned_to_id = ?", documentID, userID).Count(&taskCount)
+		if taskCount > 0 {
 			return nil
 		}
 	case "outgoing":
@@ -348,7 +355,9 @@ func (fs *FileService) checkDocumentAccess(documentType string, documentID uint,
 		if doc.DrafterID == userID || doc.ApproverID == userID || doc.CreatedByID == userID {
 			return nil
 		}
-		if userRole == models.RoleAdmin || userRole == models.RoleSecretary {
+		// Allow access for admin, secretary, team leader, and deputy
+		if userRole == models.RoleAdmin || userRole == models.RoleSecretary ||
+			userRole == models.RoleTeamLeader || userRole == models.RoleDeputy {
 			return nil
 		}
 	case "task_report":

@@ -58,6 +58,9 @@ export const TaskDetailPage: React.FC = () => {
   const [linkDocDialogOpen, setLinkDocDialogOpen] = useState(false)
   const [linkIncomingDocDialogOpen, setLinkIncomingDocDialogOpen] = useState(false)
   const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0)
+  const [chooseReviewerDialogOpen, setChooseReviewerDialogOpen] = useState(false)
+  const [selectedReviewer, setSelectedReviewer] = useState<number | null>(null)
+  const [reviewers, setReviewers] = useState<UserType[]>([])
 
   useEffect(() => {
     const fetchTaskDetails = async () => {
@@ -423,65 +426,6 @@ export const TaskDetailPage: React.FC = () => {
           {/* Task Documents */}
           <ViewTaskDocuments taskId={task.ID} refreshTrigger={documentsRefreshTrigger} />
 
-          {/* Report File */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="w-5 h-5 mr-2" />
-                File báo cáo
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium">File báo cáo</h4>
-                    {task.report_file ? (
-                      <p className="text-sm text-gray-600">
-                        {task.report_file.split('/').pop()}
-                      </p>
-                    ) : (
-                      <p className="text-sm text-gray-500">Chưa có file báo cáo</p>
-                    )}
-                  </div>
-                  <div className="flex space-x-2">
-                    {task.report_file && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDownloadFile(task.report_file, task.report_file.split('/').pop() || 'report')}
-                        disabled={downloadingFile === task.report_file}
-                      >
-                        <Download className="w-4 h-4 mr-2" />
-                        {downloadingFile === task.report_file ? 'Đang tải...' : 'Tải xuống'}
-                      </Button>
-                    )}
-                    {canUploadReport() && (
-                      <div>
-                        <input
-                          type="file"
-                          id="report-upload"
-                          className="hidden"
-                          onChange={handleReportUpload}
-                          accept=".pdf,.doc,.docx,.xls,.xlsx"
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => document.getElementById('report-upload')?.click()}
-                          disabled={uploadingReport}
-                        >
-                          <Upload className="w-4 h-4 mr-2" />
-                          {uploadingReport ? 'Đang tải...' : 'Tải lên'}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Comments */}
           <Card>
             <CardHeader>
@@ -560,7 +504,15 @@ export const TaskDetailPage: React.FC = () => {
                       <Button
                         variant="outline"
                         className="w-full justify-start"
-                        onClick={() => handleStatusUpdate('Xem xét')}
+                        onClick={async () => {
+                          // Load reviewers (Team Leader and Deputy)
+                          const usersData = await usersApi.getUsers()
+                          const reviewersList = usersData.filter((u: UserType) => 
+                            u.role === 'Trưởng Công An Xã' || u.role === 'Phó Công An Xã'
+                          )
+                          setReviewers(reviewersList)
+                          setChooseReviewerDialogOpen(true)
+                        }}
                       >
                         <CheckCircle className="w-4 h-4 mr-2" />
                         Gửi xem xét
@@ -813,6 +765,87 @@ export const TaskDetailPage: React.FC = () => {
           setDocumentsRefreshTrigger(prev => prev + 1);
         }}
       />
+
+      {/* Choose Reviewer Dialog */}
+      {chooseReviewerDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Chọn người xem xét</h3>
+            
+            <div className="space-y-3 max-h-60 overflow-y-auto mb-4">
+              {reviewers.map((reviewer) => (
+                <button
+                  key={reviewer.ID}
+                  onClick={() => setSelectedReviewer(reviewer.ID)}
+                  className={`w-full text-left p-3 border rounded-lg hover:bg-gray-50 flex items-center justify-between transition-colors ${
+                    selectedReviewer === reviewer.ID ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                  }`}
+                >
+                  <div>
+                    <div className="font-medium">{reviewer.name}</div>
+                    <div className="text-sm text-gray-500">{reviewer.role}</div>
+                  </div>
+                  {selectedReviewer === reviewer.ID && (
+                    <CheckCircle className="w-5 h-5 text-blue-600" />
+                  )}
+                </button>
+              ))}
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setChooseReviewerDialogOpen(false)
+                  setSelectedReviewer(null)
+                }}
+              >
+                Hủy
+              </Button>
+              <Button 
+                onClick={async () => {
+                  if (!selectedReviewer) {
+                    toast({
+                      variant: "destructive",
+                      title: "Lỗi",
+                      description: "Vui lòng chọn người xem xét",
+                    })
+                    return
+                  }
+                  
+                  try {
+                    await tasksApi.updateTaskStatus(task.ID, { 
+                      status: 'Xem xét',
+                      notes: `Gửi xem xét đến ${reviewers.find(r => r.ID === selectedReviewer)?.name}`
+                    })
+                    
+                    // Refresh task
+                    const updatedTask = await tasksApi.getTask(task.ID)
+                    setTask(updatedTask)
+                    
+                    toast({
+                      title: "Thành công",
+                      description: "Đã gửi công việc xem xét",
+                    })
+                    
+                    setChooseReviewerDialogOpen(false)
+                    setSelectedReviewer(null)
+                  } catch (error) {
+                    toast({
+                      variant: "destructive",
+                      title: "Lỗi",
+                      description: "Không thể gửi xem xét",
+                    })
+                  }
+                }}
+                disabled={!selectedReviewer}
+              >
+                Gửi xem xét
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -123,6 +123,15 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
+	// Update incoming document processor if task is linked to a document
+	if req.IncomingDocumentID != nil && req.AssignedTo > 0 {
+		var incomingDoc models.IncomingDocument
+		if err := database.DB.First(&incomingDoc, *req.IncomingDocumentID).Error; err == nil {
+			incomingDoc.ProcessorID = &req.AssignedTo
+			database.DB.Save(&incomingDoc)
+		}
+	}
+
 	// Create initial status history
 	createTaskStatusHistory(task.ID, "", models.StatusNotStarted, userID.(uint), "Tạo công việc mới")
 
@@ -797,6 +806,15 @@ func UpdateTaskStatus(c *gin.Context) {
 		return
 	}
 
+	// Update linked incoming document status if task is completed
+	if req.Status == models.StatusCompleted && task.IncomingDocumentID != nil {
+		var incomingDoc models.IncomingDocument
+		if err := database.DB.First(&incomingDoc, *task.IncomingDocumentID).Error; err == nil {
+			incomingDoc.Status = "completed"
+			database.DB.Save(&incomingDoc)
+		}
+	}
+
 	// Create status history
 	notes := req.Notes
 	if notes == "" {
@@ -921,6 +939,28 @@ func UpdateTask(c *gin.Context) {
 	if err := database.DB.Model(&task).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Không thể cập nhật công việc"})
 		return
+	}
+
+	// Update incoming document processor if assigned user or document changed
+	if req.IncomingDocumentID != nil && *req.IncomingDocumentID > 0 {
+		// Get the updated task to get current assigned_to
+		var updatedTask models.Task
+		database.DB.First(&updatedTask, task.ID)
+
+		if updatedTask.AssignedToID != nil {
+			var incomingDoc models.IncomingDocument
+			if err := database.DB.First(&incomingDoc, *req.IncomingDocumentID).Error; err == nil {
+				incomingDoc.ProcessorID = updatedTask.AssignedToID
+				database.DB.Save(&incomingDoc)
+			}
+		}
+	} else if req.AssignedTo > 0 && task.IncomingDocumentID != nil {
+		// If only assigned user changed, update processor
+		var incomingDoc models.IncomingDocument
+		if err := database.DB.First(&incomingDoc, *task.IncomingDocumentID).Error; err == nil {
+			incomingDoc.ProcessorID = &req.AssignedTo
+			database.DB.Save(&incomingDoc)
+		}
 	}
 
 	// Create status history for update
