@@ -416,28 +416,3 @@ func seedConfigurationData() {
 		log.Println("Đã tạo đơn vị nhận mặc định")
 	}
 }
-
-// runMigrations runs database schema migrations
-func runMigrations() {
-	log.Println("Running database migrations...")
-
-	// Migration: Add summary and order_number columns to files table
-	if !DB.HasTable("files") {
-		log.Println("Files table doesn't exist yet, skipping migration")
-		return
-	}
-
-	// Check if summary column exists
-	if !DB.NewScope(&models.File{}).HasColumn("summary") {
-		log.Println("Adding summary column to files table...")
-		DB.Exec("ALTER TABLE files ADD COLUMN summary TEXT")
-	}
-
-	// Check if order_number column exists
-	if !DB.NewScope(&models.File{}).HasColumn("order_number") {
-		log.Println("Adding order_number column to files table...")
-		DB.Exec("ALTER TABLE files ADD COLUMN order_number INTEGER")
-	}
-
-	log.Println("Database migrations completed")
-}

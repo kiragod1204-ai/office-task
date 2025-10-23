@@ -898,8 +898,15 @@ func UpdateTask(c *gin.Context) {
 	if req.AssignedTo > 0 {
 		updates["assigned_to_id"] = req.AssignedTo
 	}
+	// Handle incoming document ID - including unlinking (setting to nil/0)
 	if req.IncomingDocumentID != nil {
-		updates["incoming_document_id"] = req.IncomingDocumentID
+		if *req.IncomingDocumentID == 0 {
+			// Unlink the incoming document
+			updates["incoming_document_id"] = nil
+			updates["task_type"] = models.TaskTypeIndependent
+		} else {
+			updates["incoming_document_id"] = req.IncomingDocumentID
+		}
 	}
 	if req.TaskType != "" {
 		updates["task_type"] = req.TaskType

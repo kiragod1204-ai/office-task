@@ -297,7 +297,10 @@ export const tasksApi = {
   },
 
   unlinkIncomingDocument: async (taskId: number): Promise<Task> => {
-    const response = await apiClient.put(`/tasks/${taskId}`, { incoming_document_id: null })
+    // Send 0 to unlink the incoming document (backend will set to nil)
+    const response = await apiClient.put(`/tasks/${taskId}`, { 
+      incoming_document_id: 0 
+    })
     return response.data
   }
 }
