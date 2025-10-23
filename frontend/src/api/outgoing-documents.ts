@@ -49,6 +49,11 @@ export interface OutgoingDocument {
     username: string;
     role: string;
   };
+  linked_tasks?: Array<{
+    ID: number;
+    task_id: number;
+    outgoing_document_id: number;
+  }>;
 }
 
 export interface CreateOutgoingDocumentRequest {

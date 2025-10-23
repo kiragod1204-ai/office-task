@@ -299,6 +299,9 @@ export const OutgoingDocumentList: React.FC<OutgoingDocumentListProps> = ({
                   Trạng thái
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Công việc
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Thao tác
                 </th>
               </tr>
@@ -359,6 +362,17 @@ export const OutgoingDocumentList: React.FC<OutgoingDocumentListProps> = ({
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadgeClass(document.status)}`}>
                       {OUTGOING_STATUS_LABELS[document.status as keyof typeof OUTGOING_STATUS_LABELS]}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm">
+                    {document.linked_tasks && document.linked_tasks.length > 0 ? (
+                      <div className="flex items-center gap-1">
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                          {document.linked_tasks.length} CV
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400 text-xs">-</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">

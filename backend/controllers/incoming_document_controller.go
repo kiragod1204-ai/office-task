@@ -179,7 +179,7 @@ func GetIncomingDocuments(c *gin.Context) {
 	filterParams := services.ParseDocumentFilterParams(c)
 
 	var documents []models.IncomingDocument
-	query := database.DB.Preload("DocumentType").Preload("IssuingUnit").Preload("Processor").Preload("CreatedBy")
+	query := database.DB.Preload("DocumentType").Preload("IssuingUnit").Preload("Processor").Preload("CreatedBy").Preload("Tasks.AssignedTo")
 
 	// Apply role-based filtering
 	switch userRole.(string) {
