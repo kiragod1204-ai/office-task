@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { tasksApi, CreateTaskRequest } from '@/api/tasks'
@@ -52,12 +54,30 @@ export const EnhancedTaskForm: React.FC<EnhancedTaskFormProps> = ({
   const [incomingDocuments, setIncomingDocuments] = useState<IncomingDocument[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
-  const [userSearchTerm, setUserSearchTerm] = useState('')
   const [documentSearchTerm, setDocumentSearchTerm] = useState('')
+  const [openUserSelect, setOpenUserSelect] = useState(false)
+  const userSelectRef = React.useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetchData()
   }, [])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userSelectRef.current && !userSelectRef.current.contains(event.target as Node)) {
+        setOpenUserSelect(false)
+        setDocumentSearchTerm('')
+      }
+    }
+
+    if (openUserSelect) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [openUserSelect])
 
   const fetchData = async () => {
     setLoadingData(true)
@@ -139,15 +159,6 @@ export const EnhancedTaskForm: React.FC<EnhancedTaskFormProps> = ({
     } finally {
       setLoading(false)
     }
-  }
-
-  const filterUsers = (searchTerm: string) => {
-    if (!searchTerm.trim()) return users
-    return users.filter(user => 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.username.toLowerCase().includes(searchTerm.toLowerCase())
-    )
   }
 
   const filterDocuments = (searchTerm: string) => {
@@ -495,112 +506,138 @@ export const EnhancedTaskForm: React.FC<EnhancedTaskFormProps> = ({
           <div className="space-y-4">
             <Label>Phân công người thực hiện *</Label>
             
-            {/* Assignment Rules Info */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-              <div className="flex items-start space-x-2">
-                <UserIcon className="w-4 h-4 text-yellow-600 mt-0.5" />
-                <div>
-                  <h4 className="font-medium text-sm text-yellow-800">Quy tắc phân công</h4>
-                  <p className="text-xs text-yellow-700 mt-1">
-                    Chọn người thực hiện phù hợp với vai trò của bạn. Không thể phân công cho Quản trị viên và Văn thư.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {/* User Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Tìm kiếm theo tên, vai trò hoặc tên đăng nhập..."
-                  value={userSearchTerm}
-                  onChange={(e) => setUserSearchTerm(e.target.value)}
-                  className="pl-10 pr-10"
-                />
-                {userSearchTerm && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
-                    onClick={() => setUserSearchTerm('')}
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
-                )}
-              </div>
-
-              {/* User Selection */}
-              <Select
-                value={formData.assigned_to.toString()}
-                onValueChange={(value) => setFormData({ ...formData, assigned_to: parseInt(value) })}
+            {/* Custom Searchable User Selection */}
+            <div className="relative" ref={userSelectRef}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpenUserSelect(!openUserSelect)}
+                className="w-full justify-between h-auto min-h-[2.5rem] font-normal"
               >
-                <SelectTrigger className="h-auto min-h-[2.5rem]">
-                  <SelectValue placeholder="Chọn người thực hiện" />
-                </SelectTrigger>
-                <SelectContent className="max-h-60">
-                  {filterUsers(userSearchTerm).map((user) => (
-                    <SelectItem key={user.ID} value={user.ID.toString()}>
-                      <div className="flex items-center space-x-3 py-1">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                          <UserIcon className="w-4 h-4 text-blue-600" />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="font-medium text-sm">{user.name}</span>
-                          <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="text-xs">
-                              {user.role}
-                            </Badge>
-                            <span className="text-xs text-gray-500">@{user.username}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                  {filterUsers(userSearchTerm).length === 0 && (
-                    <div className="p-4 text-center text-gray-500">
-                      <UserIcon className="w-8 h-8 mx-auto text-gray-300 mb-2" />
-                      <p className="text-sm">
-                        {userSearchTerm ? 'Không tìm thấy người dùng phù hợp' : 'Không có người dùng khả dụng'}
-                      </p>
-                      {userSearchTerm && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          Thử tìm kiếm với từ khóa khác
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
-
-              {/* Selected User Preview */}
-              {formData.assigned_to > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  {(() => {
+                {formData.assigned_to > 0 ? (
+                  (() => {
                     const selectedUser = users.find(u => u.ID === formData.assigned_to)
                     return selectedUser ? (
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                          <CheckCircle className="w-4 h-4 text-green-600" />
+                      <div className="flex items-center space-x-2">
+                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                          <UserIcon className="w-3 h-3 text-blue-600" />
                         </div>
-                        <div>
-                          <p className="font-medium text-sm text-green-800">
-                            Đã chọn: {selectedUser.name}
-                          </p>
-                          <div className="flex items-center space-x-2 mt-1">
-                            <Badge variant="outline" className="text-xs bg-white">
-                              {selectedUser.role}
-                            </Badge>
-                            <span className="text-xs text-green-600">@{selectedUser.username}</span>
+                        <span className="font-medium">{selectedUser.name}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {selectedUser.role}
+                        </Badge>
+                      </div>
+                    ) : "Chọn người thực hiện"
+                  })()
+                ) : (
+                  <span className="text-muted-foreground">Chọn người thực hiện</span>
+                )}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+              
+              {openUserSelect && (
+                <div className="absolute z-50 w-full mt-2 bg-white border rounded-lg shadow-lg">
+                  <div className="p-2 border-b">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        placeholder="Tìm kiếm theo tên, vai trò..."
+                        value={documentSearchTerm}
+                        onChange={(e) => setDocumentSearchTerm(e.target.value)}
+                        className="pl-10"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-64 overflow-auto p-1">
+                    {users
+                      .filter(user => {
+                        if (!documentSearchTerm) return true
+                        const search = documentSearchTerm.toLowerCase()
+                        return (
+                          user.name.toLowerCase().includes(search) ||
+                          user.role.toLowerCase().includes(search) ||
+                          user.username.toLowerCase().includes(search)
+                        )
+                      })
+                      .map((user) => (
+                        <div
+                          key={user.ID}
+                          onClick={() => {
+                            setFormData({ ...formData, assigned_to: user.ID })
+                            setOpenUserSelect(false)
+                            setDocumentSearchTerm('')
+                          }}
+                          className={cn(
+                            "flex items-center space-x-3 p-2 rounded cursor-pointer hover:bg-accent",
+                            formData.assigned_to === user.ID && "bg-accent"
+                          )}
+                        >
+                          <Check
+                            className={cn(
+                              "h-4 w-4 flex-shrink-0",
+                              formData.assigned_to === user.ID ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <UserIcon className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="font-medium text-sm truncate">{user.name}</span>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant="outline" className="text-xs">
+                                {user.role}
+                              </Badge>
+                              <span className="text-xs text-gray-500 truncate">@{user.username}</span>
+                            </div>
                           </div>
                         </div>
+                      ))}
+                    {users.filter(user => {
+                      if (!documentSearchTerm) return true
+                      const search = documentSearchTerm.toLowerCase()
+                      return (
+                        user.name.toLowerCase().includes(search) ||
+                        user.role.toLowerCase().includes(search) ||
+                        user.username.toLowerCase().includes(search)
+                      )
+                    }).length === 0 && (
+                      <div className="p-4 text-center text-gray-500">
+                        <UserIcon className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                        <p className="text-sm">Không tìm thấy người dùng</p>
                       </div>
-                    ) : null
-                  })()}
+                    )}
+                  </div>
                 </div>
               )}
             </div>
+
+            {/* Selected User Preview */}
+            {formData.assigned_to > 0 && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                {(() => {
+                  const selectedUser = users.find(u => u.ID === formData.assigned_to)
+                  return selectedUser ? (
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm text-green-800">
+                          Đã chọn: {selectedUser.name}
+                        </p>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <Badge variant="outline" className="text-xs bg-white">
+                            {selectedUser.role}
+                          </Badge>
+                          <span className="text-xs text-green-600">@{selectedUser.username}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+              </div>
+            )}
           </div>
 
           {/* Processing Content */}
